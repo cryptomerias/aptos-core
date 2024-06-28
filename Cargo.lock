@@ -2267,8 +2267,14 @@ dependencies = [
  "anyhow",
  "aptos",
  "aptos-config",
+ "clap 4.4.14",
  "futures",
+ "itertools 0.12.1",
  "rand 0.7.3",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
 ]
 
