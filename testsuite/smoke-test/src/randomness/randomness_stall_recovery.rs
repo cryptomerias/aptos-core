@@ -145,4 +145,5 @@ script {
     } = get_on_chain_resource::<PerBlockRandomness>(&rest_client).await;
     assert!(seed.is_some());
     assert_eq!(epoch + 1, actual_epoch);
+    assert!(false);
 }
