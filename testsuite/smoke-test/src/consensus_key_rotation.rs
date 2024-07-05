@@ -16,6 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 use rand::thread_rng;
+use tempfile::{NamedTempFile, tempfile};
 use aptos_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
 use aptos_crypto::{bls12381, Uniform};
 
@@ -50,13 +51,17 @@ async fn consensus_key_rotation() {
         .await
         .expect("Epoch 2 taking too long to arrive!");
 
-    info!("Stop node 3; change its consensus key; restart");
     if let Some(validator) = swarm.validators_mut().nth(3) {
         let operator_sk = validator.account_private_key().as_ref().unwrap().private_key();
         let operator_idx = cli.add_account_to_cli(operator_sk);
+        info!("Stopping node 3.");
+
         validator.stop();
         tokio::time::sleep(Duration::from_secs(5)).await;
 
+        let f1 = NamedTempFile::new().unwrap();
+        let f1_path = f1.path().to_path_buf();
+        info!("Generating and writing new validator identity to {:?}.", f1_path);
         let new_sk = bls12381::PrivateKey::generate(&mut thread_rng());
         let pop = bls12381::ProofOfPossession::create(&new_sk);
         let new_pk = bls12381::PublicKey::from(&new_sk);
@@ -66,7 +71,17 @@ async fn consensus_key_rotation() {
             .initial_safety_rules_config
             .identity_blob().unwrap();
         validator_identity_blob.consensus_private_key = Some(new_sk);
-        validator_identity_blob.to_file(identity_blob_path).unwrap();
+        validator_identity_blob.to_file(&f1_path).unwrap();
+
+        info!("Updating node config accordingly.");
+        let config_path = validator.config_path();
+        let mut validator_override_config =
+            OverrideNodeConfig::load_config(config_path.clone()).unwrap();
+        *validator_override_config
+            .override_config_mut()
+            .consensus.safety_rules.initial_safety_rules_config.identity_blob_path_mut() = f1_path;
+        validator_override_config.save_config(config_path).unwrap();
+
         info!("Restarting node.");
         validator.start().unwrap();
         info!("Let node bake for 5 secs.");
