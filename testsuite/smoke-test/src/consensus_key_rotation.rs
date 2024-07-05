@@ -69,7 +69,6 @@ async fn consensus_key_rotation() {
         let new_sk = bls12381::PrivateKey::generate(&mut thread_rng());
         let pop = bls12381::ProofOfPossession::create(&new_sk);
         let new_pk = bls12381::PublicKey::from(&new_sk);
-        let InitialSafetyRulesConfig::FromFile { identity_blob_path, .. } = &validator.config().consensus.safety_rules.initial_safety_rules_config else { unreachable!() };
         let mut validator_identity_blob = validator.config()
             .consensus.safety_rules
             .initial_safety_rules_config
@@ -98,7 +97,12 @@ async fn consensus_key_rotation() {
         let mut attempts = 10;
         while attempts > 0 {
             attempts -= 1;
-            let update_result = cli.update_consensus_key(operator_idx, None, new_pk.clone(), pop.clone()).await;
+            let gas_options = GasOptions {
+                gas_unit_price: Some(100),
+                max_gas: Some(200000),
+                expiration_secs: 60,
+            };
+            let update_result = cli.update_consensus_key(operator_idx, None, new_pk.clone(), pop.clone(), Some(gas_options)).await;
             println!("update_result={:?}", update_result);
             if let Ok(txn_smry) = update_result {
                 if txn_smry.success == Some(true) {
