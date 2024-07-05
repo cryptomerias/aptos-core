@@ -63,7 +63,8 @@ async fn consensus_key_rotation() {
         validator.stop();
         tokio::time::sleep(Duration::from_secs(5)).await;
 
-        let new_identity_path = tempdir().unwrap().path().join(Path::new("new-validator-identity.yaml"));
+        let dir = tempdir().unwrap();
+        let new_identity_path = dir.path().join(Path::new("new-validator-identity.yaml"));
         info!("Generating and writing new validator identity to {:?}.", new_identity_path);
         let new_sk = bls12381::PrivateKey::generate(&mut thread_rng());
         let pop = bls12381::ProofOfPossession::create(&new_sk);
