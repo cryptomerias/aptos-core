@@ -163,12 +163,12 @@ impl InitialSafetyRulesConfig {
 
     pub fn identity_blob_path_mut(&mut self) -> &mut PathBuf {
         match self {
-            InitialSafetyRulesConfig::FromFile { identity_blob_path, .. } => {
-                identity_blob_path
-            }
+            InitialSafetyRulesConfig::FromFile {
+                identity_blob_path, ..
+            } => identity_blob_path,
             InitialSafetyRulesConfig::None => {
                 unreachable!()
-            }
+            },
         }
     }
 }
