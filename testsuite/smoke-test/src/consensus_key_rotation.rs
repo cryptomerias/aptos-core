@@ -48,15 +48,15 @@ async fn consensus_key_rotation() {
     // let root_addr = swarm.chain_info().root_account().address();
     // let root_idx = cli.add_account_with_address_to_cli(swarm.root_key(), root_addr);
     let rest_client = swarm.validators().next().unwrap().rest_client();
-
     info!("Wait for epoch 2.");
     swarm
         .wait_for_all_nodes_to_catchup_to_epoch(2, Duration::from_secs(epoch_duration_secs * 2))
         .await
         .expect("Epoch 2 taking too long to arrive!");
 
-    if let Some(validator) = swarm.validators_mut().nth(3) {
+    let (operator_addr, new_pk, pop, operator_idx) = if let Some(validator) = swarm.validators_mut().nth(3) {
         let operator_sk = validator.account_private_key().as_ref().unwrap().private_key();
+        let operator_sk_hex = operator_sk.to_bytes();
         let operator_idx = cli.add_account_to_cli(operator_sk);
         info!("Stopping node 3.");
 
@@ -74,6 +74,10 @@ async fn consensus_key_rotation() {
             .initial_safety_rules_config
             .identity_blob().unwrap();
         validator_identity_blob.consensus_private_key = Some(new_sk);
+        let operator_addr = validator_identity_blob.account_address.unwrap();
+        let operator_sk_hex_2 = validator_identity_blob.account_private_key.as_ref().unwrap().to_bytes();
+        assert_eq!(operator_sk_hex, operator_sk_hex_2);
+
         Write::write_all(
             &mut File::create(&new_identity_path).unwrap(),
             serde_yaml::to_string(&validator_identity_blob).unwrap().as_bytes()
@@ -92,29 +96,32 @@ async fn consensus_key_rotation() {
         validator.start().unwrap();
         info!("Let node bake for 5 secs.");
         tokio::time::sleep(Duration::from_secs(5)).await;
+        (operator_addr, new_pk, pop, operator_idx)
+    } else {
+        unreachable!()
+    };
 
-        info!("Update on-chain.");
-        let mut attempts = 10;
-        while attempts > 0 {
-            attempts -= 1;
-            let gas_options = GasOptions {
-                gas_unit_price: Some(100),
-                max_gas: Some(200000),
-                expiration_secs: 60,
-            };
-            let update_result = cli.update_consensus_key(operator_idx, None, new_pk.clone(), pop.clone(), Some(gas_options)).await;
-            println!("update_result={:?}", update_result);
-            if let Ok(txn_smry) = update_result {
-                if txn_smry.success == Some(true) {
-                    break;
-                }
+    info!("Update on-chain.");
+
+    swarm.chain_info().into_aptos_public_info().mint(operator_addr, 99999999999).await.unwrap();
+    let mut attempts = 10;
+    while attempts > 0 {
+        attempts -= 1;
+        let gas_options = GasOptions {
+            gas_unit_price: Some(100),
+            max_gas: Some(200000),
+            expiration_secs: 60,
+        };
+        let update_result = cli.update_consensus_key(operator_idx, None, new_pk.clone(), pop.clone(), Some(gas_options)).await;
+        println!("update_result={:?}", update_result);
+        if let Ok(txn_smry) = update_result {
+            if txn_smry.success == Some(true) {
+                break;
             }
         }
-
-        assert!(attempts >= 1);
-    } else {
-        assert!(false);
     }
+
+    assert!(attempts >= 1);
 
     // info!("Wait for long enough to see an epoch switch.");
     // tokio::time::sleep(Duration::from_secs(30)).await;
