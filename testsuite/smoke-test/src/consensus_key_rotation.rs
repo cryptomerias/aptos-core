@@ -11,10 +11,12 @@ use aptos_forge::{NodeExt, Swarm, SwarmExt};
 use aptos_logger::{debug, info};
 use aptos_types::{on_chain_config::OnChainRandomnessConfig, randomness::PerBlockRandomness};
 use std::{
+    io::Write,
     ops::Add,
     sync::Arc,
     time::{Duration, Instant},
 };
+use std::fs::File;
 use std::path::Path;
 use diesel::sql_types::Uuid;
 use rand::thread_rng;
@@ -72,7 +74,10 @@ async fn consensus_key_rotation() {
             .initial_safety_rules_config
             .identity_blob().unwrap();
         validator_identity_blob.consensus_private_key = Some(new_sk);
-        validator_identity_blob.to_file(&new_identity_path).unwrap();
+        Write::write_all(
+            &mut File::create(&new_identity_path).unwrap(),
+            serde_yaml::to_string(&validator_identity_blob).unwrap().as_bytes()
+        ).unwrap();
 
         info!("Updating node config accordingly.");
         let config_path = validator.config_path();
