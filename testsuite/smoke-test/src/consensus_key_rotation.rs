@@ -8,7 +8,7 @@ use aptos_crypto::{bls12381, Uniform};
 use aptos_forge::{NodeExt, Swarm, SwarmExt};
 use aptos_logger::info;
 use aptos_types::on_chain_config::{OnChainRandomnessConfig, ValidatorSet};
-use rand::thread_rng;
+use rand::{Rng, thread_rng};
 use std::{
     fs::File,
     io::Write,
@@ -17,6 +17,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use std::path::PathBuf;
 use tempfile::tempdir;
 use aptos_types::validator_verifier::ValidatorVerifier;
 use crate::utils::get_on_chain_resource;
@@ -24,9 +25,8 @@ use crate::utils::get_on_chain_resource;
 #[tokio::test]
 async fn consensus_key_rotation() {
     let epoch_duration_secs = 20;
-
-    let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(4)
-        .with_num_fullnodes(1)
+    let n = 4;
+    let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(n)
         .with_aptos()
         .with_init_config(Arc::new(|_, conf, _| {
             conf.api.failpoints_enabled = true;
@@ -47,12 +47,12 @@ async fn consensus_key_rotation() {
         .await
         .expect("Epoch 2 taking too long to arrive!");
 
-    let rest_client = swarm.validators().next().unwrap().rest_client();
-    let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
-    println!("validator_set={}", validator_set);
+    // let rest_client = swarm.validators().next().unwrap().rest_client();
+    // let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
+    // println!("validator_set={}", validator_set);
 
     let (operator_addr, new_pk, pop, operator_idx) =
-        if let Some(validator) = swarm.validators_mut().nth(3) {
+        if let Some(validator) = swarm.validators_mut().nth(n - 1) {
             let operator_sk = validator
                 .account_private_key()
                 .as_ref()
@@ -60,13 +60,12 @@ async fn consensus_key_rotation() {
                 .private_key();
             let operator_sk_hex = operator_sk.to_bytes();
             let operator_idx = cli.add_account_to_cli(operator_sk);
-            info!("Stopping node 3.");
+            info!("Stopping the last node.");
 
             validator.stop();
             tokio::time::sleep(Duration::from_secs(5)).await;
 
-            let dir = tempdir().unwrap();
-            let new_identity_path = dir.path().join(Path::new("new-validator-identity.yaml"));
+            let new_identity_path = PathBuf::from(format!("/tmp/{}-new-validator-identity.yaml", thread_rng().gen::<u64>()).as_str());
             info!(
                 "Generating and writing new validator identity to {:?}.",
                 new_identity_path
@@ -159,8 +158,8 @@ async fn consensus_key_rotation() {
         .liveness_check(Instant::now().add(Duration::from_secs(30)))
         .await;
 
-    let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
-    println!("validator_set={}", validator_set);
+    // let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
+    // println!("validator_set={}", validator_set);
 
     assert!(liveness_check_result.is_ok());
     assert!(false);
