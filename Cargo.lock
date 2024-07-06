@@ -3475,6 +3475,7 @@ dependencies = [
  "aptos-vault-client",
  "claims",
  "criterion",
+ "hex",
  "once_cell",
  "proptest",
  "rand 0.7.3",
