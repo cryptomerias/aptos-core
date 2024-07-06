@@ -156,13 +156,14 @@ async fn consensus_key_rotation() {
     info!("Wait for epoch 3.");
     let mut attempts = 100;
     while attempts > 0 {
-        attemps -= 1;
+        attempts -= 1;
         let c = get_on_chain_resource::<ConfigurationResource>(&rest_client).await;
         if c.epoch() == 3 {
             break;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
+    assert!(attempts >= 1);
 
     info!("All nodes should be alive.");
     let liveness_check_result = swarm
