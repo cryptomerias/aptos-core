@@ -7,7 +7,7 @@ use aptos_config::config::{OverrideNodeConfig, PersistableConfig};
 use aptos_crypto::{bls12381, Uniform};
 use aptos_forge::{NodeExt, Swarm, SwarmExt};
 use aptos_logger::info;
-use aptos_types::on_chain_config::{OnChainRandomnessConfig, ValidatorSet};
+use aptos_types::on_chain_config::{ConfigurationResource, OnChainRandomnessConfig, ValidatorSet};
 use rand::{Rng, thread_rng};
 use std::{
     fs::File,
@@ -24,7 +24,7 @@ use crate::utils::get_on_chain_resource;
 
 #[tokio::test]
 async fn consensus_key_rotation() {
-    let epoch_duration_secs = 300;
+    let epoch_duration_secs = 100;
     let n = 4;
     let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(n)
         .with_aptos()
@@ -47,7 +47,7 @@ async fn consensus_key_rotation() {
         .await
         .expect("Epoch 2 taking too long to arrive!");
 
-    // let rest_client = swarm.validators().next().unwrap().rest_client();
+    let rest_client = swarm.validators().next().unwrap().rest_client();
     // let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
     // println!("validator_set={}", validator_set);
 
@@ -152,6 +152,17 @@ async fn consensus_key_rotation() {
     }
 
     assert!(attempts >= 1);
+
+    info!("Wait for epoch 3.");
+    let mut attempts = 100;
+    while attempts > 0 {
+        attemps -= 1;
+        let c = get_on_chain_resource::<ConfigurationResource>(&rest_client).await;
+        if c.epoch() == 3 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 
     info!("All nodes should be alive.");
     let liveness_check_result = swarm
