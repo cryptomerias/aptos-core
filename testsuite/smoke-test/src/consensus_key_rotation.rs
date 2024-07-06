@@ -163,4 +163,5 @@ async fn consensus_key_rotation() {
     println!("validator_set={}", validator_set);
 
     assert!(liveness_check_result.is_ok());
+    assert!(false);
 }
