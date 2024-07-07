@@ -47,6 +47,7 @@ async fn consensus_key_rotation() {
 
     info!("Wait for epoch 3.");
     wait_until_epoch(&rest_client, 3, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
+    info!("Epoch 3 arrived.");
 
     // let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
     // println!("validator_set={}", validator_set);
@@ -58,7 +59,7 @@ async fn consensus_key_rotation() {
                 .as_ref()
                 .unwrap()
                 .private_key();
-            let operator_sk_hex = operator_sk.to_bytes();
+            // let operator_sk_hex = operator_sk.to_bytes();
             let operator_idx = cli.add_account_to_cli(operator_sk);
             info!("Stopping the last node.");
 
@@ -153,8 +154,9 @@ async fn consensus_key_rotation() {
 
     assert!(attempts >= 1);
 
-    info!("Wait for epoch 4.");
-    wait_until_epoch(&rest_client, 4, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
+    info!("Wait for epoch 5.");
+    wait_until_epoch(&rest_client, 5, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
+    info!("Epoch 4 arrived.");
 
     info!("All nodes should be alive.");
     let liveness_check_result = swarm
