@@ -34,6 +34,7 @@ use futures::{channel::mpsc, SinkExt};
 use futures_channel::mpsc::UnboundedSender;
 use move_core_types::account_address::AccountAddress;
 use std::{collections::HashMap, sync::Arc};
+use aptos_crypto::bls12381::PrivateKey;
 
 pub struct MockExecutionClient {
     state_sync_client: mpsc::UnboundedSender<Vec<SignedTransaction>>,
@@ -94,6 +95,7 @@ impl MockExecutionClient {
 impl TExecutionClient for MockExecutionClient {
     async fn start_epoch(
         &self,
+        _maybe_consensus_key: Option<Arc<PrivateKey>>,
         _epoch_state: Arc<EpochState>,
         _commit_signer_provider: Arc<dyn CommitSignerProvider>,
         _payload_manager: Arc<PayloadManager>,

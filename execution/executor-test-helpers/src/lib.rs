@@ -4,6 +4,7 @@
 
 pub mod integration_test_impl;
 
+use std::sync::Arc;
 use aptos_config::config::NodeConfig;
 use aptos_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
@@ -62,7 +63,7 @@ pub fn extract_signer(config: &mut NodeConfig) -> ValidatorSigner {
     let sr_test = config.consensus.safety_rules.test.as_ref().unwrap();
     ValidatorSigner::new(
         sr_test.author,
-        sr_test.consensus_key.as_ref().unwrap().private_key(),
+        Arc::new(sr_test.consensus_key.as_ref().unwrap().private_key()),
     )
 }
 
