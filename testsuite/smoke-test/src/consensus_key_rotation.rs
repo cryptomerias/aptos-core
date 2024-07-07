@@ -18,13 +18,15 @@ use std::{
     time::{Duration, Instant},
 };
 use std::path::PathBuf;
+use anyhow::bail;
 use tempfile::tempdir;
+use aptos_rest_client::Client;
 use aptos_types::validator_verifier::ValidatorVerifier;
 use crate::utils::get_on_chain_resource;
 
 #[tokio::test]
 async fn consensus_key_rotation() {
-    let epoch_duration_secs = 100;
+    let epoch_duration_secs = 60;
     let n = 4;
     let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(n)
         .with_aptos()
@@ -41,13 +43,11 @@ async fn consensus_key_rotation() {
         .build_with_cli(0)
         .await;
 
-    info!("Wait for epoch 2.");
-    swarm
-        .wait_for_all_nodes_to_catchup_to_epoch(2, Duration::from_secs(epoch_duration_secs * 2))
-        .await
-        .expect("Epoch 2 taking too long to arrive!");
-
     let rest_client = swarm.validators().next().unwrap().rest_client();
+
+    info!("Wait for epoch 3.");
+    wait_until_epoch(&rest_client, 3, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
+
     // let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
     // println!("validator_set={}", validator_set);
 
@@ -153,17 +153,8 @@ async fn consensus_key_rotation() {
 
     assert!(attempts >= 1);
 
-    info!("Wait for epoch 3.");
-    let mut attempts = 100;
-    while attempts > 0 {
-        attempts -= 1;
-        let c = get_on_chain_resource::<ConfigurationResource>(&rest_client).await;
-        if c.epoch() == 3 {
-            break;
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
-    assert!(attempts >= 1);
+    info!("Wait for epoch 4.");
+    wait_until_epoch(&rest_client, 4, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
 
     info!("All nodes should be alive.");
     let liveness_check_result = swarm
@@ -175,4 +166,16 @@ async fn consensus_key_rotation() {
 
     assert!(liveness_check_result.is_ok());
     assert!(false);
+}
+
+async fn wait_until_epoch(rest_cli: &Client, target_epoch: u64, time_limit: Duration) -> anyhow::Result<()> {
+    let timer = Instant::now();
+    while timer.elapsed() < time_limit {
+        let c = get_on_chain_resource::<ConfigurationResource>(&rest_cli).await;
+        if c.epoch() >= target_epoch {
+            return Ok(())
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    bail!("");
 }
