@@ -4,7 +4,6 @@
 
 pub mod integration_test_impl;
 
-use std::sync::Arc;
 use aptos_config::config::NodeConfig;
 use aptos_crypto::{
     ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
@@ -23,6 +22,7 @@ use aptos_types::{
     waypoint::Waypoint,
 };
 use aptos_vm::VMExecutor;
+use std::sync::Arc;
 
 /// Helper function for test to blindly bootstrap without waypoint.
 pub fn bootstrap_genesis<V: VMExecutor>(

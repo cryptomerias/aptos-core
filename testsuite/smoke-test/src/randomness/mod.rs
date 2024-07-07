@@ -1,6 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::utils;
 use anyhow::{anyhow, ensure, Result};
 use aptos_crypto::{compat::Sha3_256, Uniform};
 use aptos_dkg::weighted_vuf::traits::WeightedVUF;
@@ -8,7 +9,7 @@ use aptos_forge::LocalSwarm;
 use aptos_logger::info;
 use aptos_rest_client::Client;
 use aptos_types::{
-    dkg::{DefaultDKG, DKGSessionState, DKGState, DKGTrait},
+    dkg::{DKGSessionState, DKGState, DKGTrait, DefaultDKG},
     on_chain_config::{OnChainConfig, OnChainConsensusConfig},
     randomness::{PerBlockRandomness, RandMetadata, WVUF},
     validator_verifier::ValidatorConsensusInfo,
@@ -18,7 +19,6 @@ use move_core_types::{account_address::AccountAddress, language_storage::CORE_CO
 use rand::{prelude::StdRng, SeedableRng};
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
-use crate::utils;
 
 mod disable_feature_0;
 mod disable_feature_1;

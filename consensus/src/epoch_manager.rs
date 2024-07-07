@@ -58,7 +58,6 @@ use aptos_bounded_executor::BoundedExecutor;
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_config::config::{
     ConsensusConfig, DagConsensusConfig, ExecutionConfig, NodeConfig, QcAggregatorType,
-    SafetyRulesConfig, SecureBackend,
 };
 use aptos_consensus_types::{
     common::{Author, Round},
@@ -66,19 +65,17 @@ use aptos_consensus_types::{
     epoch_retrieval::EpochRetrievalRequest,
     proof_of_store::ProofCache,
 };
-use aptos_crypto::bls12381;
+use aptos_crypto::bls12381::PrivateKey;
 use aptos_dkg::{
     pvss::{traits::Transcript, Player},
     weighted_vuf::traits::WeightedVUF,
 };
 use aptos_event_notifications::ReconfigNotificationListener;
-use aptos_global_constants::CONSENSUS_KEY;
 use aptos_infallible::{duration_since_epoch, Mutex};
 use aptos_logger::prelude::*;
 use aptos_mempool::QuorumStoreRequest;
 use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
-use aptos_safety_rules::{PersistentSafetyStorage, safety_rules_manager, SafetyRulesManager};
-use aptos_secure_storage::{KVStorage, Storage};
+use aptos_safety_rules::{safety_rules_manager, PersistentSafetyStorage, SafetyRulesManager};
 use aptos_types::{
     account_address::AccountAddress,
     dkg::{real_dkg::maybe_dk_from_bls_sk, DKGState, DKGTrait, DefaultDKG},
@@ -93,6 +90,7 @@ use aptos_types::{
     },
     randomness::{RandKeys, WvufPP, WVUF},
     validator_signer::ValidatorSigner,
+    validator_verifier::ValidatorVerifier,
 };
 use aptos_validator_transaction_pool::VTxnPoolState;
 use fail::fail_point;
@@ -115,9 +113,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use aptos_crypto::bls12381::PrivateKey;
-use aptos_safety_rules::safety_rules_manager::storage;
-use aptos_types::validator_verifier::ValidatorVerifier;
 
 /// Range of rounds (window) that we might be calling proposer election
 /// functions with at any given time, in addition to the proposer history length.
@@ -208,7 +203,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         let dag_config = node_config.dag_consensus.clone();
         let sr_config = &node_config.consensus.safety_rules;
         let safety_rules_manager = SafetyRulesManager::new(sr_config);
-        let key_storage = safety_rules_manager::storage(&sr_config);
+        let key_storage = safety_rules_manager::storage(sr_config);
         Self {
             author,
             config,
@@ -957,8 +952,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .copied()
             .ok_or_else(|| NoRandomnessReason::NotInValidatorSet)?;
 
-        let consensus_key = maybe_consensus_key.ok_or(NoRandomnessReason::ConsensusKeyUnavailable)?;
-        let dkg_decrypt_key = maybe_dk_from_bls_sk(consensus_key.as_ref()).map_err(NoRandomnessReason::ErrConvertingConsensusKeyToDecryptionKey)?;
+        let consensus_key =
+            maybe_consensus_key.ok_or(NoRandomnessReason::ConsensusKeyUnavailable)?;
+        let dkg_decrypt_key = maybe_dk_from_bls_sk(consensus_key.as_ref())
+            .map_err(NoRandomnessReason::ErrConvertingConsensusKeyToDecryptionKey)?;
         let transcript = bcs::from_bytes::<<DefaultDKG as DKGTrait>::Transcript>(
             dkg_session.transcript.as_slice(),
         )
@@ -968,7 +965,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
         // No need to verify the transcript.
 
-        info!(epoch = new_epoch, "dk_hex={}", hex::encode(dkg_decrypt_key.to_bytes()));
+        info!(
+            epoch = new_epoch,
+            "dk_hex={}",
+            hex::encode(dkg_decrypt_key.to_bytes())
+        );
         // keys for randomness generation
         let (sk, pk) = DefaultDKG::decrypt_secret_share_from_transcript(
             &dkg_pub_params,
@@ -1127,13 +1128,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         });
 
         let loaded_consensus_key = match self.load_consensus_key(&epoch_state.verifier) {
-            Ok(k) => {
-                Some(Arc::new(k))
-            }
+            Ok(k) => Some(Arc::new(k)),
             Err(e) => {
                 warn!("load_consensus_key failed: {e}");
                 None
-            }
+            },
         };
 
         let rand_configs = self.try_get_rand_config_for_new_epoch(
@@ -1306,7 +1305,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         rand_msg_rx: aptos_channel::Receiver<AccountAddress, IncomingRandGenRequest>,
     ) {
         let epoch = epoch_state.epoch;
-        let signer = Arc::new(ValidatorSigner::new(self.author, loaded_consensus_key.clone().expect("unable to get private key")));
+        let signer = Arc::new(ValidatorSigner::new(
+            self.author,
+            loaded_consensus_key
+                .clone()
+                .expect("unable to get private key"),
+        ));
         let commit_signer = Arc::new(DagCommitSigner::new(signer.clone()));
 
         assert!(
@@ -1752,8 +1756,12 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     fn load_consensus_key(&self, vv: &ValidatorVerifier) -> anyhow::Result<PrivateKey> {
-        let pk = vv.get_public_key(&self.author).ok_or_else(||anyhow!("i am not in the validator set!"))?;
-        self.key_storage.consensus_key_for_version(pk).map_err(|e|anyhow!("could not find sk by pk: {:?}", e))
+        let pk = vv
+            .get_public_key(&self.author)
+            .ok_or_else(|| anyhow!("i am not in the validator set!"))?;
+        self.key_storage
+            .consensus_key_for_version(pk)
+            .map_err(|e| anyhow!("could not find sk by pk: {:?}", e))
     }
 }
 

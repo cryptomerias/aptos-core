@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    randomness::{
-        decrypt_key_map, script_to_disable_main_logic, verify_dkg_transcript,
-    },
+    randomness::{decrypt_key_map, script_to_disable_main_logic, verify_dkg_transcript},
     smoke_test_environment::SwarmBuilder,
+    utils::get_on_chain_resource,
 };
 use aptos_forge::{Node, Swarm, SwarmExt};
 use aptos_logger::{debug, info};
@@ -13,7 +12,6 @@ use aptos_types::{
     dkg::DKGState, on_chain_config::OnChainRandomnessConfig, randomness::PerBlockRandomness,
 };
 use std::{sync::Arc, time::Duration};
-use crate::utils::get_on_chain_resource;
 
 /// Disable on-chain randomness by only disabling randomness main logic.
 #[tokio::test]

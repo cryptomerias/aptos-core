@@ -33,10 +33,12 @@ use aptos_consensus_types::{
     common::{Author, Round},
     pipelined_block::PipelinedBlock,
 };
+use aptos_crypto::bls12381::PrivateKey;
 use aptos_executor_types::ExecutorResult;
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;
 use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
+use aptos_safety_rules::{safety_rules_manager::storage, PersistentSafetyStorage};
 use aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
@@ -51,9 +53,6 @@ use futures::{
 use futures_channel::mpsc::unbounded;
 use move_core_types::account_address::AccountAddress;
 use std::sync::Arc;
-use aptos_crypto::bls12381::PrivateKey;
-use aptos_safety_rules::PersistentSafetyStorage;
-use aptos_safety_rules::safety_rules_manager::{storage};
 
 #[async_trait::async_trait]
 pub trait TExecutionClient: Send + Sync {
@@ -220,7 +219,7 @@ impl ExecutionProxyClient {
 
                 let (reset_tx_to_rand_manager, reset_rand_manager_rx) = unbounded::<ResetRequest>();
                 let consensus_sk = maybe_consensus_key
-                        .expect("consensus key unavailable for ExecutionProxyClient");
+                    .expect("consensus key unavailable for ExecutionProxyClient");
                 let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk));
 
                 let rand_manager = RandManager::<Share, AugmentedData>::new(

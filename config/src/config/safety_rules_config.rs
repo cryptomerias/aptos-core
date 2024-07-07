@@ -131,7 +131,11 @@ pub enum InitialSafetyRulesConfig {
 }
 
 impl InitialSafetyRulesConfig {
-    pub fn from_file(identity_blob_path: PathBuf, overriding_identity_paths: Vec<PathBuf>, waypoint: WaypointConfig) -> Self {
+    pub fn from_file(
+        identity_blob_path: PathBuf,
+        overriding_identity_paths: Vec<PathBuf>,
+        waypoint: WaypointConfig,
+    ) -> Self {
         Self::FromFile {
             identity_blob_path,
             overriding_identity_paths,
@@ -166,24 +170,28 @@ impl InitialSafetyRulesConfig {
 
     pub fn overriding_identity_blobs(&self) -> anyhow::Result<Vec<IdentityBlob>> {
         match self {
-            InitialSafetyRulesConfig::FromFile { overriding_identity_paths, .. } => {
+            InitialSafetyRulesConfig::FromFile {
+                overriding_identity_paths,
+                ..
+            } => {
                 let mut blobs = vec![];
                 for path in overriding_identity_paths {
                     let blob = IdentityBlob::from_file(path)?;
                     blobs.push(blob);
                 }
                 Ok(blobs)
-            }
+            },
             InitialSafetyRulesConfig::None => {
                 bail!("loading overriding identity blobs failed with missing initial safety rules config")
-            }
+            },
         }
     }
 
     pub fn overriding_identity_blob_paths_mut(&mut self) -> &mut Vec<PathBuf> {
         match self {
             InitialSafetyRulesConfig::FromFile {
-                overriding_identity_paths, ..
+                overriding_identity_paths,
+                ..
             } => overriding_identity_paths,
             InitialSafetyRulesConfig::None => {
                 unreachable!()

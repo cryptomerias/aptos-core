@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    genesis::enable_sync_only_mode,
-    smoke_test_environment::SwarmBuilder,
+    genesis::enable_sync_only_mode, smoke_test_environment::SwarmBuilder,
+    utils::get_on_chain_resource,
 };
 use aptos::common::types::GasOptions;
 use aptos_config::config::{OverrideNodeConfig, PersistableConfig};
@@ -15,7 +15,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use crate::utils::get_on_chain_resource;
 
 /// Chain recovery using a local config from randomness stall should work.
 /// See `randomness_config_seqnum.move` for more details.

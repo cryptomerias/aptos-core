@@ -19,9 +19,10 @@ use aptos_event_notifications::{
 use aptos_logger::{debug, error, info, warn};
 use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
 use aptos_reliable_broadcast::ReliableBroadcast;
+use aptos_safety_rules::{safety_rules_manager::storage, PersistentSafetyStorage};
 use aptos_types::{
     account_address::AccountAddress,
-    dkg::{DKGStartEvent, DKGState, DKGTrait, DefaultDKG},
+    dkg::{DKGStartEvent, DKGState, DefaultDKG},
     epoch_state::EpochState,
     on_chain_config::{
         OnChainConfigPayload, OnChainConfigProvider, OnChainConsensusConfig,
@@ -33,8 +34,6 @@ use futures::StreamExt;
 use futures_channel::oneshot;
 use std::{sync::Arc, time::Duration};
 use tokio_retry::strategy::ExponentialBackoff;
-use aptos_safety_rules::PersistentSafetyStorage;
-use aptos_safety_rules::safety_rules_manager::storage;
 
 pub struct EpochManager<P: OnChainConfigProvider> {
     // Some useful metadata
@@ -151,7 +150,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .await
             .expect("Reconfig sender dropped, unable to start new epoch");
         self.start_new_epoch(reconfig_notification.on_chain_configs)
-            .await;
+            .await
+            .unwrap();
     }
 
     async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) -> Result<()> {
@@ -234,8 +234,16 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             self.dkg_rpc_msg_tx = Some(dkg_rpc_msg_tx);
             let (dkg_manager_close_tx, dkg_manager_close_rx) = oneshot::channel();
             self.dkg_manager_close_tx = Some(dkg_manager_close_tx);
-            let my_pk = epoch_state.verifier.get_public_key(&self.my_addr).ok_or_else(||anyhow!("my pk not found in validator set"))?;
-            let dealer_sk = self.key_storage.consensus_key_for_version(my_pk).map_err(|e|anyhow!("dkg new epoch handling failed with consensus sk lookup err: {e}"))?;
+            let my_pk = epoch_state
+                .verifier
+                .get_public_key(&self.my_addr)
+                .ok_or_else(|| anyhow!("my pk not found in validator set"))?;
+            let dealer_sk = self
+                .key_storage
+                .consensus_key_for_version(my_pk)
+                .map_err(|e| {
+                    anyhow!("dkg new epoch handling failed with consensus sk lookup err: {e}")
+                })?;
             let dkg_manager = DKGManager::<DefaultDKG>::new(
                 Arc::new(dealer_sk),
                 my_index,
@@ -257,7 +265,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     async fn on_new_epoch(&mut self, reconfig_notification: ReconfigNotification<P>) -> Result<()> {
         self.shutdown_current_processor().await;
         self.start_new_epoch(reconfig_notification.on_chain_configs)
-            .await;
+            .await?;
         Ok(())
     }
 

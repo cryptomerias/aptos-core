@@ -3,7 +3,7 @@
 
 use crate::{network::ApplicationNetworkInterfaces, services};
 use aptos_admin_service::AdminService;
-use aptos_config::config::{NodeConfig, SafetyRulesConfig};
+use aptos_config::config::NodeConfig;
 use aptos_consensus::{
     consensus_observer::{
         network_message::ConsensusObserverMessage, publisher::ConsensusPublisher,
@@ -17,7 +17,6 @@ use aptos_event_notifications::{
     DbBackedOnChainConfig, EventNotificationListener, ReconfigNotificationListener,
 };
 use aptos_jwk_consensus::{start_jwk_consensus_runtime, types::JWKConsensusMsg};
-use aptos_logger::debug;
 use aptos_mempool::QuorumStoreRequest;
 use aptos_storage_interface::DbReaderWriter;
 use aptos_validator_transaction_pool::VTxnPoolState;

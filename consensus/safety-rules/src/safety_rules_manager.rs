@@ -11,15 +11,13 @@ use crate::{
     thread::ThreadService,
     SafetyRules, TSafetyRules,
 };
-use anyhow::anyhow;
 use aptos_config::config::{InitialSafetyRulesConfig, SafetyRulesConfig, SafetyRulesService};
+use aptos_crypto::bls12381::PublicKey;
 use aptos_global_constants::CONSENSUS_KEY;
 use aptos_infallible::RwLock;
-use aptos_secure_storage::{Error, KVStorage, Storage};
-use std::{net::SocketAddr, sync::Arc};
-use std::time::Instant;
-use aptos_crypto::bls12381::{PrivateKey, PublicKey};
 use aptos_logger::{info, warn};
+use aptos_secure_storage::{KVStorage, Storage};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 
 pub fn storage(config: &SafetyRulesConfig) -> PersistentSafetyStorage {
     let backend = &config.backend;
@@ -45,7 +43,7 @@ pub fn storage(config: &SafetyRulesConfig) -> PersistentSafetyStorage {
             config.enable_cached_safety_data,
         )
     } else {
-        let mut storage =
+        let storage =
             PersistentSafetyStorage::new(internal_storage, config.enable_cached_safety_data);
 
         let mut storage = if storage.author().is_ok() {
@@ -78,17 +76,21 @@ pub fn storage(config: &SafetyRulesConfig) -> PersistentSafetyStorage {
 
         // Ensuring all the overriding consensus keys are in the storage.
         let timer = Instant::now();
-        for blob in config.initial_safety_rules_config.overriding_identity_blobs().unwrap_or_default() {
+        for blob in config
+            .initial_safety_rules_config
+            .overriding_identity_blobs()
+            .unwrap_or_default()
+        {
             if let Some(sk) = blob.consensus_private_key {
                 let pk_hex = hex::encode(PublicKey::from(&sk).to_bytes());
                 let storage_key = format!("{}_{}", CONSENSUS_KEY, pk_hex);
                 match storage.internal_store().set(storage_key.as_str(), sk) {
                     Ok(_) => {
                         info!("Setting {storage_key} succeeded.");
-                    }
+                    },
                     Err(e) => {
                         warn!("Setting {storage_key} failed with internal store set error: {e}");
-                    }
+                    },
                 }
             }
         }

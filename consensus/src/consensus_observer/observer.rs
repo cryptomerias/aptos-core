@@ -933,10 +933,7 @@ impl ConsensusObserver {
 
         let sk = Arc::new(bls12381::PrivateKey::genesis());
         // Start the new epoch
-        let signer = Arc::new(ValidatorSigner::new(
-            AccountAddress::ZERO,
-            sk.clone(),
-        ));
+        let signer = Arc::new(ValidatorSigner::new(AccountAddress::ZERO, sk.clone()));
         let dummy_signer = Arc::new(DagCommitSigner::new(signer.clone()));
         let (_, rand_msg_rx) =
             aptos_channel::new::<AccountAddress, IncomingRandGenRequest>(QueueStyle::FIFO, 1, None);

@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    randomness::{
-        decrypt_key_map, verify_dkg_transcript, wait_for_dkg_finish,
-    },
+    randomness::{decrypt_key_map, verify_dkg_transcript, wait_for_dkg_finish},
     smoke_test_environment::SwarmBuilder,
+    utils::get_on_chain_resource,
 };
 use aptos_forge::{NodeExt, SwarmExt};
 use aptos_logger::{debug, info};
@@ -13,7 +12,6 @@ use aptos_rest_client::Client;
 use aptos_types::{dkg::DKGState, on_chain_config::OnChainRandomnessConfig};
 use futures::future::join_all;
 use std::{sync::Arc, time::Duration};
-use crate::utils::get_on_chain_resource;
 
 #[tokio::test]
 async fn validator_restart_during_dkg() {

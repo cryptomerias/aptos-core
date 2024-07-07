@@ -1,28 +1,27 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::smoke_test_environment::SwarmBuilder;
+use crate::{smoke_test_environment::SwarmBuilder, utils::get_on_chain_resource};
+use anyhow::bail;
 use aptos::common::types::GasOptions;
 use aptos_config::config::{OverrideNodeConfig, PersistableConfig};
 use aptos_crypto::{bls12381, Uniform};
 use aptos_forge::{NodeExt, Swarm, SwarmExt};
 use aptos_logger::info;
-use aptos_types::on_chain_config::{ConfigurationResource, OnChainRandomnessConfig, ValidatorSet};
-use rand::{Rng, thread_rng};
+use aptos_rest_client::Client;
+use aptos_types::{
+    on_chain_config::{ConfigurationResource, OnChainRandomnessConfig, ValidatorSet},
+    validator_verifier::ValidatorVerifier,
+};
+use rand::{thread_rng, Rng};
 use std::{
     fs::File,
     io::Write,
     ops::Add,
-    path::Path,
+    path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
-use std::path::PathBuf;
-use anyhow::bail;
-use tempfile::tempdir;
-use aptos_rest_client::Client;
-use aptos_types::validator_verifier::ValidatorVerifier;
-use crate::utils::get_on_chain_resource;
 
 #[tokio::test]
 async fn consensus_key_rotation() {
@@ -43,7 +42,13 @@ async fn consensus_key_rotation() {
     let rest_client = swarm.validators().next().unwrap().rest_client();
 
     info!("Wait for epoch 3.");
-    wait_until_epoch(&rest_client, 3, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
+    wait_until_epoch(
+        &rest_client,
+        3,
+        Duration::from_secs(epoch_duration_secs * 2),
+    )
+    .await
+    .unwrap();
     info!("Epoch 3 arrived.");
 
     let (operator_addr, new_pk, pop, operator_idx) =
@@ -59,7 +64,13 @@ async fn consensus_key_rotation() {
             validator.stop();
             tokio::time::sleep(Duration::from_secs(5)).await;
 
-            let new_identity_path = PathBuf::from(format!("/tmp/{}-new-validator-identity.yaml", thread_rng().gen::<u64>()).as_str());
+            let new_identity_path = PathBuf::from(
+                format!(
+                    "/tmp/{}-new-validator-identity.yaml",
+                    thread_rng().gen::<u64>()
+                )
+                .as_str(),
+            );
             info!(
                 "Generating and writing new validator identity to {:?}.",
                 new_identity_path
@@ -94,7 +105,8 @@ async fn consensus_key_rotation() {
                 .consensus
                 .safety_rules
                 .initial_safety_rules_config
-                .overriding_identity_blob_paths_mut().push(new_identity_path);
+                .overriding_identity_blob_paths_mut()
+                .push(new_identity_path);
             validator_override_config.save_config(config_path).unwrap();
 
             info!("Restarting the node.");
@@ -142,7 +154,13 @@ async fn consensus_key_rotation() {
     assert!(attempts >= 1);
 
     info!("Wait for epoch 5.");
-    wait_until_epoch(&rest_client, 5, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
+    wait_until_epoch(
+        &rest_client,
+        5,
+        Duration::from_secs(epoch_duration_secs * 2),
+    )
+    .await
+    .unwrap();
     info!("Epoch 5 arrived.");
 
     info!("All nodes should be alive.");
@@ -155,15 +173,18 @@ async fn consensus_key_rotation() {
     let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
     let verifier = ValidatorVerifier::from(&validator_set);
     assert_eq!(new_pk, verifier.get_public_key(&operator_addr).unwrap());
-
 }
 
-async fn wait_until_epoch(rest_cli: &Client, target_epoch: u64, time_limit: Duration) -> anyhow::Result<()> {
+async fn wait_until_epoch(
+    rest_cli: &Client,
+    target_epoch: u64,
+    time_limit: Duration,
+) -> anyhow::Result<()> {
     let timer = Instant::now();
     while timer.elapsed() < time_limit {
-        let c = get_on_chain_resource::<ConfigurationResource>(&rest_cli).await;
+        let c = get_on_chain_resource::<ConfigurationResource>(rest_cli).await;
         if c.epoch() >= target_epoch {
-            return Ok(())
+            return Ok(());
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }

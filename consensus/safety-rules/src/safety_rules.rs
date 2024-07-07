@@ -32,8 +32,7 @@ use aptos_types::{
     waypoint::Waypoint,
 };
 use serde::Serialize;
-use std::cmp::Ordering;
-use std::sync::Arc;
+use std::{cmp::Ordering, sync::Arc};
 
 pub(crate) fn next_round(round: Round) -> Result<Round, Error> {
     u64::checked_add(round, 1).ok_or(Error::IncorrectRound(round))

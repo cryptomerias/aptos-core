@@ -11,8 +11,8 @@ use crate::{
 use anyhow::{anyhow, Result};
 use aptos_bounded_executor::BoundedExecutor;
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
+use aptos_config::config::SafetyRulesConfig;
 use aptos_consensus_types::common::Author;
-use aptos_crypto::bls12381::PrivateKey;
 use aptos_event_notifications::{
     EventNotification, EventNotificationListener, ReconfigNotification,
     ReconfigNotificationListener,
@@ -20,6 +20,7 @@ use aptos_event_notifications::{
 use aptos_logger::{error, info};
 use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
 use aptos_reliable_broadcast::ReliableBroadcast;
+use aptos_safety_rules::{safety_rules_manager::storage, PersistentSafetyStorage};
 use aptos_types::{
     account_address::AccountAddress,
     epoch_state::EpochState,
@@ -35,9 +36,6 @@ use futures::StreamExt;
 use futures_channel::oneshot;
 use std::{sync::Arc, time::Duration};
 use tokio_retry::strategy::ExponentialBackoff;
-use aptos_config::config::SafetyRulesConfig;
-use aptos_safety_rules::PersistentSafetyStorage;
-use aptos_safety_rules::safety_rules_manager::storage;
 
 pub struct EpochManager<P: OnChainConfigProvider> {
     // some useful metadata
@@ -147,7 +145,8 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .await
             .expect("Reconfig sender dropped, unable to start new epoch");
         self.start_new_epoch(reconfig_notification.on_chain_configs)
-            .await;
+            .await
+            .unwrap();
     }
 
     async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) -> Result<()> {
@@ -213,8 +212,18 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 BoundedExecutor::new(8, tokio::runtime::Handle::current()),
             );
             let update_certifier = UpdateCertifier::new(rb);
-            let my_pk = epoch_state.verifier.get_public_key(&self.my_addr).ok_or_else(||anyhow!("my pk not found in validator set"))?;
-            let my_sk = self.key_storage.consensus_key_for_version(my_pk).map_err(|e|anyhow!("jwk-consensus new epoch handling failed with consensus sk lookup err: {e}"))?;
+            let my_pk = epoch_state
+                .verifier
+                .get_public_key(&self.my_addr)
+                .ok_or_else(|| anyhow!("my pk not found in validator set"))?;
+            let my_sk = self
+                .key_storage
+                .consensus_key_for_version(my_pk)
+                .map_err(|e| {
+                    anyhow!(
+                        "jwk-consensus new epoch handling failed with consensus sk lookup err: {e}"
+                    )
+                })?;
             let jwk_consensus_manager = JWKManager::new(
                 Arc::new(my_sk),
                 self.my_addr,
@@ -246,7 +255,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     async fn on_new_epoch(&mut self, reconfig_notification: ReconfigNotification<P>) -> Result<()> {
         self.shutdown_current_processor().await;
         self.start_new_epoch(reconfig_notification.on_chain_configs)
-            .await;
+            .await?;
         Ok(())
     }
 

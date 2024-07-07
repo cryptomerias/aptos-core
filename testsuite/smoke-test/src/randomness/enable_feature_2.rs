@@ -4,13 +4,12 @@
 use crate::{
     randomness::{decrypt_key_map, verify_dkg_transcript},
     smoke_test_environment::SwarmBuilder,
-    utils::get_current_consensus_config,
+    utils::{get_current_consensus_config, get_on_chain_resource},
 };
 use aptos_forge::{Node, Swarm, SwarmExt};
 use aptos_logger::{debug, info};
 use aptos_types::{dkg::DKGState, on_chain_config::OnChainRandomnessConfig};
 use std::{sync::Arc, time::Duration};
-use crate::utils::get_on_chain_resource;
 
 /// Enable on-chain randomness by enabling validator transactions and randomness main logic.
 #[tokio::test]

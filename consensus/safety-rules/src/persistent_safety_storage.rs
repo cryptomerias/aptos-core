@@ -2,7 +2,6 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::bail;
 use crate::{
     counters,
     logging::{self, LogEntry, LogEvent},
@@ -67,7 +66,10 @@ impl PersistentSafetyStorage {
         author: Author,
         consensus_private_key: bls12381::PrivateKey,
     ) -> Result<(), Error> {
-        warn!("0704 - writing consensus key 0x{} into secure storage", hex::encode(consensus_private_key.to_bytes()));
+        warn!(
+            "0704 - writing consensus key 0x{} into secure storage",
+            hex::encode(consensus_private_key.to_bytes())
+        );
         let result = internal_store.set(CONSENSUS_KEY, consensus_private_key);
         // Attempting to re-initialize existing storage. This can happen in environments like
         // forge. Rather than be rigid here, leave it up to the developer to detect
@@ -105,8 +107,14 @@ impl PersistentSafetyStorage {
         let _timer = counters::start_timer("get", CONSENSUS_KEY);
         let pk_hex = hex::encode(version.to_bytes());
         let explicit_storage_key = format!("{}_{}", CONSENSUS_KEY, pk_hex);
-        let explicit_sk = self.internal_store.get::<bls12381::PrivateKey>(explicit_storage_key.as_str()).map(|v|v.value);
-        let default_sk = self.internal_store.get::<bls12381::PrivateKey>(CONSENSUS_KEY).map(|v| v.value);
+        let explicit_sk = self
+            .internal_store
+            .get::<bls12381::PrivateKey>(explicit_storage_key.as_str())
+            .map(|v| v.value);
+        let default_sk = self
+            .internal_store
+            .get::<bls12381::PrivateKey>(CONSENSUS_KEY)
+            .map(|v| v.value);
         let key = match (explicit_sk, default_sk) {
             (Ok(sk_0), _) => {
                 info!("0704 - sk_0");
@@ -119,7 +127,7 @@ impl PersistentSafetyStorage {
             (Err(_), Err(_)) => {
                 info!("0704 - err");
                 return Err(Error::ValidatorKeyNotFound("0704 - not found!".to_string()));
-            }
+            },
         };
         if key.public_key() != version {
             return Err(Error::SecureStorageMissingDataError(format!(

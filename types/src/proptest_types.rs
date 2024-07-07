@@ -54,8 +54,8 @@ use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     iter::Iterator,
+    sync::Arc,
 };
-use std::sync::Arc;
 
 impl WriteOp {
     pub fn value_strategy() -> impl Strategy<Value = Self> {
@@ -1018,7 +1018,10 @@ impl ValidatorSetGen {
             .get_account_infos_dedup(&self.validators)
             .iter()
             .map(|account| {
-                ValidatorSigner::new(account.address, Arc::new(account.consensus_private_key.clone()))
+                ValidatorSigner::new(
+                    account.address,
+                    Arc::new(account.consensus_private_key.clone()),
+                )
             })
             .collect()
     }

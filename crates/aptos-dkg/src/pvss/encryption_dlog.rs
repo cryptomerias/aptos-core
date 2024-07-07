@@ -215,7 +215,7 @@ pub mod g1 {
         constants::{G1_PROJ_NUM_BYTES, SCALAR_NUM_BYTES},
         utils::{
             random::random_scalar,
-            serialization::{scalar_from_bytes_le, g1_proj_from_bytes},
+            serialization::{g1_proj_from_bytes, scalar_from_bytes_le},
         },
     };
     use aptos_crypto::{
@@ -279,8 +279,8 @@ pub mod g1 {
     }
     impl Uniform for DecryptPrivKey {
         fn generate<R>(rng: &mut R) -> Self
-            where
-                R: rand_core::RngCore + rand::Rng + rand_core::CryptoRng + rand::CryptoRng,
+        where
+            R: rand_core::RngCore + rand::Rng + rand_core::CryptoRng + rand::CryptoRng,
         {
             DecryptPrivKey {
                 dk: random_scalar(rng),
