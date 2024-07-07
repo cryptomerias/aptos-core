@@ -102,12 +102,12 @@ async fn consensus_key_rotation() {
             let config_path = validator.config_path();
             let mut validator_override_config =
                 OverrideNodeConfig::load_config(config_path.clone()).unwrap();
-            *validator_override_config
+            validator_override_config
                 .override_config_mut()
                 .consensus
                 .safety_rules
                 .initial_safety_rules_config
-                .identity_blob_path_mut() = new_identity_path;
+                .overriding_identity_blob_paths_mut().push(new_identity_path);
             validator_override_config.save_config(config_path).unwrap();
 
             info!("Restarting node.");

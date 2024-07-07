@@ -165,7 +165,6 @@ impl PersistentSafetyStorage {
         Ok(())
     }
 
-    #[cfg(any(test, feature = "testing"))]
     pub fn internal_store(&mut self) -> &mut Storage {
         &mut self.internal_store
     }
