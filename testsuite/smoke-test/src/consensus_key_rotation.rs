@@ -49,9 +49,6 @@ async fn consensus_key_rotation() {
     wait_until_epoch(&rest_client, 3, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
     info!("Epoch 3 arrived.");
 
-    // let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
-    // println!("validator_set={}", validator_set);
-
     let (operator_addr, new_pk, pop, operator_idx) =
         if let Some(validator) = swarm.validators_mut().nth(n - 1) {
             let operator_sk = validator
@@ -163,8 +160,9 @@ async fn consensus_key_rotation() {
         .liveness_check(Instant::now().add(Duration::from_secs(30)))
         .await;
 
-    // let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
-    // println!("validator_set={}", validator_set);
+    let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
+    let vv = ValidatorVerifier::from(&validator_set);
+    println!("new_pk_on_chain={:?}", vv.get_public_key(&operator_addr));
 
     assert!(liveness_check_result.is_ok());
     assert!(false);
