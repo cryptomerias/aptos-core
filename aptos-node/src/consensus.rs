@@ -3,7 +3,7 @@
 
 use crate::{network::ApplicationNetworkInterfaces, services};
 use aptos_admin_service::AdminService;
-use aptos_config::config::NodeConfig;
+use aptos_config::config::{NodeConfig, SafetyRulesConfig};
 use aptos_consensus::{
     consensus_observer::{
         network_message::ConsensusObserverMessage, publisher::ConsensusPublisher,
@@ -19,7 +19,6 @@ use aptos_event_notifications::{
 use aptos_jwk_consensus::{start_jwk_consensus_runtime, types::JWKConsensusMsg};
 use aptos_logger::debug;
 use aptos_mempool::QuorumStoreRequest;
-use aptos_safety_rules::safety_rules_manager::load_consensus_key_from_secure_storage;
 use aptos_storage_interface::DbReaderWriter;
 use aptos_validator_transaction_pool::VTxnPoolState;
 use futures::channel::mpsc::Sender;
@@ -136,13 +135,9 @@ pub fn create_dkg_runtime(
     )>,
     dkg_network_interfaces: Option<ApplicationNetworkInterfaces<DKGMessage>>,
 ) -> (VTxnPoolState, Option<Runtime>) {
-    let maybe_dkg_dealer_sk =
-        load_consensus_key_from_secure_storage(&node_config.consensus.safety_rules);
-    debug!("maybe_dkg_dealer_sk={:?}", maybe_dkg_dealer_sk);
-
     let vtxn_pool = VTxnPoolState::default();
-    let dkg_runtime = match (dkg_network_interfaces, maybe_dkg_dealer_sk) {
-        (Some(interfaces), Ok(dkg_dealer_sk)) => {
+    let dkg_runtime = match dkg_network_interfaces {
+        Some(interfaces) => {
             let ApplicationNetworkInterfaces {
                 network_client,
                 network_service_events,
@@ -153,7 +148,7 @@ pub fn create_dkg_runtime(
             let rb_config = node_config.consensus.rand_rb_config.clone();
             let dkg_runtime = start_dkg_runtime(
                 my_addr,
-                dkg_dealer_sk,
+                &node_config.consensus.safety_rules,
                 network_client,
                 network_service_events,
                 reconfig_events,
@@ -180,15 +175,8 @@ pub fn create_jwk_consensus_runtime(
     jwk_consensus_network_interfaces: Option<ApplicationNetworkInterfaces<JWKConsensusMsg>>,
     vtxn_pool: &VTxnPoolState,
 ) -> Option<Runtime> {
-    let maybe_jwk_consensus_key =
-        load_consensus_key_from_secure_storage(&node_config.consensus.safety_rules);
-    debug!(
-        "jwk_consensus_key_err={:?}",
-        maybe_jwk_consensus_key.as_ref().err()
-    );
-
-    let jwk_consensus_runtime = match (jwk_consensus_network_interfaces, maybe_jwk_consensus_key) {
-        (Some(interfaces), Ok(consensus_key)) => {
+    let jwk_consensus_runtime = match jwk_consensus_network_interfaces {
+        Some(interfaces) => {
             let ApplicationNetworkInterfaces {
                 network_client,
                 network_service_events,
@@ -199,7 +187,7 @@ pub fn create_jwk_consensus_runtime(
             let my_addr = node_config.validator_network.as_ref().unwrap().peer_id();
             let jwk_consensus_runtime = start_jwk_consensus_runtime(
                 my_addr,
-                consensus_key,
+                &node_config.consensus.safety_rules,
                 network_client,
                 network_service_events,
                 reconfig_events,

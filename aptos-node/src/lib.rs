@@ -714,17 +714,6 @@ pub fn setup_environment_and_start_node(
             peers_and_metadata,
         );
 
-    // Ensure consensus key in secure DB.
-    if !matches!(
-        node_config
-            .consensus
-            .safety_rules
-            .initial_safety_rules_config,
-        InitialSafetyRulesConfig::None
-    ) {
-        aptos_safety_rules::safety_rules_manager::storage(&node_config.consensus.safety_rules);
-    }
-
     // Create the DKG runtime and get the VTxn pool
     let (vtxn_pool, dkg_runtime) =
         consensus::create_dkg_runtime(&mut node_config, dkg_subscriptions, dkg_network_interfaces);

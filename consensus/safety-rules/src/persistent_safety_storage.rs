@@ -2,6 +2,7 @@
 // Parts of the project are originally copyright © Meta Platforms, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::bail;
 use crate::{
     counters,
     logging::{self, LogEntry, LogEvent},
@@ -102,10 +103,27 @@ impl PersistentSafetyStorage {
         version: bls12381::PublicKey,
     ) -> Result<bls12381::PrivateKey, Error> {
         let _timer = counters::start_timer("get", CONSENSUS_KEY);
-        let key: bls12381::PrivateKey = self.internal_store.get(CONSENSUS_KEY).map(|v| v.value)?;
+        let pk_hex = hex::encode(version.to_bytes());
+        let explicit_storage_key = format!("{}_{}", CONSENSUS_KEY, pk_hex);
+        let explicit_sk = self.internal_store.get::<bls12381::PrivateKey>(explicit_storage_key.as_str()).map(|v|v.value);
+        let default_sk = self.internal_store.get::<bls12381::PrivateKey>(CONSENSUS_KEY).map(|v| v.value);
+        let key = match (explicit_sk, default_sk) {
+            (Ok(sk_0), _) => {
+                info!("0704 - sk_0");
+                sk_0
+            },
+            (Err(_), Ok(sk_1)) => {
+                info!("0704 - sk_1");
+                sk_1
+            },
+            (Err(_), Err(_)) => {
+                info!("0704 - err");
+                return Err(Error::ValidatorKeyNotFound("0704 - not found!".to_string()));
+            }
+        };
         if key.public_key() != version {
             return Err(Error::SecureStorageMissingDataError(format!(
-                "PrivateKey for {:?} not found",
+                "Incorrect sk saved for {:?} the expected pk",
                 version
             )));
         }

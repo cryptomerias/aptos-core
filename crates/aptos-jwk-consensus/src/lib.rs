@@ -13,11 +13,12 @@ use aptos_network::application::interface::{NetworkClient, NetworkServiceEvents}
 use aptos_types::account_address::AccountAddress;
 use aptos_validator_transaction_pool::VTxnPoolState;
 use tokio::runtime::Runtime;
+use aptos_config::config::SafetyRulesConfig;
 
 #[allow(clippy::let_and_return)]
 pub fn start_jwk_consensus_runtime(
     my_addr: AccountAddress,
-    consensus_key: PrivateKey,
+    safety_rules_config: &SafetyRulesConfig,
     network_client: NetworkClient<JWKConsensusMsg>,
     network_service_events: NetworkServiceEvents<JWKConsensusMsg>,
     reconfig_events: ReconfigNotificationListener<DbBackedOnChainConfig>,
@@ -29,7 +30,7 @@ pub fn start_jwk_consensus_runtime(
     let jwk_consensus_network_client = JWKConsensusNetworkClient::new(network_client);
     let epoch_manager = EpochManager::new(
         my_addr,
-        consensus_key,
+        safety_rules_config,
         reconfig_events,
         jwk_updated_events,
         self_sender,

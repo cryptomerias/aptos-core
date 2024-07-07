@@ -37,7 +37,6 @@ use aptos_executor_types::ExecutorResult;
 use aptos_infallible::RwLock;
 use aptos_logger::prelude::*;
 use aptos_network::{application::interface::NetworkClient, protocols::network::Event};
-use aptos_safety_rules::safety_rules_manager::load_consensus_key_from_secure_storage;
 use aptos_types::{
     epoch_state::EpochState,
     ledger_info::LedgerInfoWithSignatures,
@@ -52,6 +51,8 @@ use futures::{
 use futures_channel::mpsc::unbounded;
 use move_core_types::account_address::AccountAddress;
 use std::sync::Arc;
+use aptos_safety_rules::PersistentSafetyStorage;
+use aptos_safety_rules::safety_rules_manager::{storage};
 
 #[async_trait::async_trait]
 pub trait TExecutionClient: Send + Sync {
@@ -150,6 +151,7 @@ pub struct ExecutionProxyClient {
     rand_storage: Arc<dyn RandStorage<AugmentedData>>,
     consensus_observer_config: ConsensusObserverConfig,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
+    key_storage: PersistentSafetyStorage,
 }
 
 impl ExecutionProxyClient {
@@ -164,6 +166,7 @@ impl ExecutionProxyClient {
         consensus_observer_config: ConsensusObserverConfig,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
     ) -> Self {
+        let key_storage = storage(&consensus_config.safety_rules);
         Self {
             consensus_config,
             execution_proxy,
@@ -175,6 +178,7 @@ impl ExecutionProxyClient {
             rand_storage,
             consensus_observer_config,
             consensus_publisher,
+            key_storage,
         }
     }
 
@@ -212,10 +216,10 @@ impl ExecutionProxyClient {
                 let (rand_ready_block_tx, rand_ready_block_rx) = unbounded::<OrderedBlocks>();
 
                 let (reset_tx_to_rand_manager, reset_rand_manager_rx) = unbounded::<ResetRequest>();
-                let consensus_key =
-                    load_consensus_key_from_secure_storage(&self.consensus_config.safety_rules)
+                let consensus_pk = epoch_state.verifier.get_public_key(&self.author).unwrap();
+                let consensus_sk = self.key_storage.consensus_key_for_version(consensus_pk)
                         .expect("Failed in loading consensus key for ExecutionProxyClient.");
-                let signer = Arc::new(ValidatorSigner::new(self.author, consensus_key));
+                let signer = Arc::new(ValidatorSigner::new(self.author, consensus_sk));
 
                 let rand_manager = RandManager::<Share, AugmentedData>::new(
                     self.author,

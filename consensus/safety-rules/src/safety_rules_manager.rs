@@ -98,17 +98,6 @@ pub fn storage(config: &SafetyRulesConfig) -> PersistentSafetyStorage {
     }
 }
 
-pub fn load_consensus_key_from_secure_storage(
-    config: &SafetyRulesConfig,
-) -> anyhow::Result<PrivateKey> {
-    let storage: Storage = (&config.backend).into();
-    let storage = Box::new(storage);
-    let response = storage.get::<PrivateKey>(CONSENSUS_KEY).map_err(|e| {
-        anyhow!("load_consensus_key_from_secure_storage failed with storage read error: {e}")
-    })?;
-    Ok(response.value)
-}
-
 enum SafetyRulesWrapper {
     Local(Arc<RwLock<SafetyRules>>),
     Process(ProcessService),

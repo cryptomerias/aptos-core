@@ -8,7 +8,7 @@ use crate::{
     types::JWKConsensusMsg,
     update_certifier::UpdateCertifier,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use aptos_bounded_executor::BoundedExecutor;
 use aptos_channels::{aptos_channel, message_queues::QueueStyle};
 use aptos_consensus_types::common::Author;
@@ -35,6 +35,9 @@ use futures::StreamExt;
 use futures_channel::oneshot;
 use std::{sync::Arc, time::Duration};
 use tokio_retry::strategy::ExponentialBackoff;
+use aptos_config::config::SafetyRulesConfig;
+use aptos_safety_rules::PersistentSafetyStorage;
+use aptos_safety_rules::safety_rules_manager::storage;
 
 pub struct EpochManager<P: OnChainConfigProvider> {
     // some useful metadata
@@ -42,7 +45,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     epoch_state: Option<Arc<EpochState>>,
 
     // credential
-    consensus_key: Arc<PrivateKey>,
+    key_storage: PersistentSafetyStorage,
 
     // events we subscribe
     reconfig_events: ReconfigNotificationListener<P>,
@@ -65,7 +68,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
 impl<P: OnChainConfigProvider> EpochManager<P> {
     pub fn new(
         my_addr: AccountAddress,
-        consensus_key: PrivateKey,
+        safety_rules_config: &SafetyRulesConfig,
         reconfig_events: ReconfigNotificationListener<P>,
         jwk_updated_events: EventNotificationListener,
         self_sender: aptos_channels::Sender<Event<JWKConsensusMsg>>,
@@ -74,7 +77,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     ) -> Self {
         Self {
             my_addr,
-            consensus_key: Arc::new(consensus_key),
+            key_storage: storage(safety_rules_config),
             epoch_state: None,
             reconfig_events,
             jwk_updated_events,
@@ -147,7 +150,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .await;
     }
 
-    async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) {
+    async fn start_new_epoch(&mut self, payload: OnChainConfigPayload<P>) -> Result<()> {
         let validator_set: ValidatorSet = payload
             .get()
             .expect("failed to get ValidatorSet from payload");
@@ -210,9 +213,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 BoundedExecutor::new(8, tokio::runtime::Handle::current()),
             );
             let update_certifier = UpdateCertifier::new(rb);
-
+            let my_pk = epoch_state.verifier.get_public_key(&self.my_addr).ok_or_else(||anyhow!("my pk not found in validator set"))?;
+            let my_sk = self.key_storage.consensus_key_for_version(my_pk).map_err(|e|anyhow!("jwk-consensus new epoch handling failed with consensus sk lookup err: {e}"))?;
             let jwk_consensus_manager = JWKManager::new(
-                self.consensus_key.clone(),
+                Arc::new(my_sk),
                 self.my_addr,
                 epoch_state.clone(),
                 Arc::new(update_certifier),
@@ -236,6 +240,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             ));
             info!(epoch = epoch_state.epoch, "JWKManager spawned.",);
         }
+        Ok(())
     }
 
     async fn on_new_epoch(&mut self, reconfig_notification: ReconfigNotification<P>) -> Result<()> {
