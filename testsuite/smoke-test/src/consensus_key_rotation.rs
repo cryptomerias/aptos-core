@@ -156,7 +156,7 @@ async fn consensus_key_rotation() {
 
     info!("Wait for epoch 5.");
     wait_until_epoch(&rest_client, 5, Duration::from_secs(epoch_duration_secs * 2)).await.unwrap();
-    info!("Epoch 4 arrived.");
+    info!("Epoch 5 arrived.");
 
     info!("All nodes should be alive.");
     let liveness_check_result = swarm

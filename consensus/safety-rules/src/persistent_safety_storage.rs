@@ -66,7 +66,7 @@ impl PersistentSafetyStorage {
         author: Author,
         consensus_private_key: bls12381::PrivateKey,
     ) -> Result<(), Error> {
-        print!("0704 - writing consensus key 0x{} into secure storage", hex::encode(consensus_private_key.to_bytes()));
+        warn!("0704 - writing consensus key 0x{} into secure storage", hex::encode(consensus_private_key.to_bytes()));
         let result = internal_store.set(CONSENSUS_KEY, consensus_private_key);
         // Attempting to re-initialize existing storage. This can happen in environments like
         // forge. Rather than be rigid here, leave it up to the developer to detect
