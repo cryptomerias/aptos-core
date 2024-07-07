@@ -27,12 +27,9 @@ use crate::utils::get_on_chain_resource;
 #[tokio::test]
 async fn consensus_key_rotation() {
     let epoch_duration_secs = 60;
-    let n = 4;
+    let n = 2;
     let (mut swarm, mut cli, _faucet) = SwarmBuilder::new_local(n)
         .with_aptos()
-        .with_init_config(Arc::new(|_, conf, _| {
-            conf.api.failpoints_enabled = true;
-        }))
         .with_init_genesis_config(Arc::new(move |conf| {
             conf.epoch_duration_secs = epoch_duration_secs;
 
@@ -56,7 +53,6 @@ async fn consensus_key_rotation() {
                 .as_ref()
                 .unwrap()
                 .private_key();
-            // let operator_sk_hex = operator_sk.to_bytes();
             let operator_idx = cli.add_account_to_cli(operator_sk);
             info!("Stopping the last node.");
 
@@ -80,12 +76,6 @@ async fn consensus_key_rotation() {
                 .unwrap();
             validator_identity_blob.consensus_private_key = Some(new_sk);
             let operator_addr = validator_identity_blob.account_address.unwrap();
-            // let operator_sk_hex_2 = validator_identity_blob
-            //     .account_private_key
-            //     .as_ref()
-            //     .unwrap()
-            //     .to_bytes();
-            // assert_eq!(operator_sk_hex, operator_sk_hex_2);
 
             Write::write_all(
                 &mut File::create(&new_identity_path).unwrap(),
@@ -95,7 +85,7 @@ async fn consensus_key_rotation() {
             )
             .unwrap();
 
-            info!("Updating node config accordingly.");
+            info!("Updating the node config accordingly.");
             let config_path = validator.config_path();
             let mut validator_override_config =
                 OverrideNodeConfig::load_config(config_path.clone()).unwrap();
@@ -107,9 +97,9 @@ async fn consensus_key_rotation() {
                 .overriding_identity_blob_paths_mut().push(new_identity_path);
             validator_override_config.save_config(config_path).unwrap();
 
-            info!("Restarting node.");
+            info!("Restarting the node.");
             validator.start().unwrap();
-            info!("Let node bake for 5 secs.");
+            info!("Let it bake for 5 secs.");
             tokio::time::sleep(Duration::from_secs(5)).await;
             (operator_addr, new_pk, pop, operator_idx)
         } else {
@@ -159,13 +149,13 @@ async fn consensus_key_rotation() {
     let liveness_check_result = swarm
         .liveness_check(Instant::now().add(Duration::from_secs(30)))
         .await;
-
-    let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
-    let vv = ValidatorVerifier::from(&validator_set);
-    println!("new_pk_on_chain={:?}", vv.get_public_key(&operator_addr));
-
     assert!(liveness_check_result.is_ok());
-    assert!(false);
+
+    info!("On-chain pk should be updated.");
+    let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
+    let verifier = ValidatorVerifier::from(&validator_set);
+    assert_eq!(new_pk, verifier.get_public_key(&operator_addr));
+
 }
 
 async fn wait_until_epoch(rest_cli: &Client, target_epoch: u64, time_limit: Duration) -> anyhow::Result<()> {
