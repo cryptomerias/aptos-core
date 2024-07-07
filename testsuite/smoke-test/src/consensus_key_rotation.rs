@@ -154,7 +154,7 @@ async fn consensus_key_rotation() {
     info!("On-chain pk should be updated.");
     let validator_set = get_on_chain_resource::<ValidatorSet>(&rest_client).await;
     let verifier = ValidatorVerifier::from(&validator_set);
-    assert_eq!(new_pk, verifier.get_public_key(&operator_addr));
+    assert_eq!(new_pk, verifier.get_public_key(&operator_addr).unwrap());
 
 }
 
