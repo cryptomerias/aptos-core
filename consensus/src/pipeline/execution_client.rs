@@ -152,7 +152,6 @@ pub struct ExecutionProxyClient {
     rand_storage: Arc<dyn RandStorage<AugmentedData>>,
     consensus_observer_config: ConsensusObserverConfig,
     consensus_publisher: Option<Arc<ConsensusPublisher>>,
-    key_storage: PersistentSafetyStorage,
 }
 
 impl ExecutionProxyClient {
@@ -167,7 +166,6 @@ impl ExecutionProxyClient {
         consensus_observer_config: ConsensusObserverConfig,
         consensus_publisher: Option<Arc<ConsensusPublisher>>,
     ) -> Self {
-        let key_storage = storage(&consensus_config.safety_rules);
         Self {
             consensus_config,
             execution_proxy,
@@ -179,7 +177,6 @@ impl ExecutionProxyClient {
             rand_storage,
             consensus_observer_config,
             consensus_publisher,
-            key_storage,
         }
     }
 
