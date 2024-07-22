@@ -108,7 +108,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             .get(&self.my_addr)
             .copied();
 
-        let mpc_enabled = false; //mpc todo
+        let mpc_enabled = true; //mpc todo: check on-chain state instead
         if let (true, Some(my_index)) = (mpc_enabled, my_index) {
             let mpc_state = payload.get::<MpcState>().unwrap_or_default();
 
