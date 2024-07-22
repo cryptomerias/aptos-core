@@ -6,7 +6,8 @@ use move_binary_format::{errors::PartialVMResult, file_format::CompiledScript};
 use sha3::{Digest, Sha3_256};
 use std::sync::Arc;
 
-pub struct ScriptHash(#[allow(dead_code)] [u8; 32]);
+// TODO(George) remove pub here for inner type.
+pub struct ScriptHash(pub [u8; 32]);
 
 impl From<&[u8]> for ScriptHash {
     fn from(serialized_script: &[u8]) -> Self {
@@ -23,13 +24,12 @@ pub trait ScriptStorage {
         serialized_script: &[u8],
     ) -> PartialVMResult<Arc<CompiledScript>>;
 
-    fn fetch_or_create_verified_script<F: Fn(Arc<CompiledScript>) -> PartialVMResult<Script>>(
+    fn fetch_or_create_verified_script(
         &self,
         serialized_script: &[u8],
-        f: F,
+        f: &dyn Fn(Arc<CompiledScript>) -> PartialVMResult<Script>,
     ) -> PartialVMResult<Arc<Script>>;
 
     // Panics if the script has not been created and cached before.
-    #[allow(dead_code)]
     fn fetch_existing_verified_script(&self, script_hash: &ScriptHash) -> Arc<Script>;
 }

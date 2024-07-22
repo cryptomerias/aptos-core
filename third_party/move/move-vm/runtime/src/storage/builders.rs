@@ -20,7 +20,7 @@ pub struct ScriptBuilder<V: Verifier>(PhantomData<V>);
 
 impl<V: Verifier> ScriptBuilder<V> {
     pub(crate) fn build(
-        module_storage: &impl ModuleStorage,
+        module_storage: &dyn ModuleStorage,
         struct_name_index_map: &StructNameIndexMap,
         compiled_script: Arc<CompiledScript>,
     ) -> PartialVMResult<Script> {
@@ -31,7 +31,7 @@ impl<V: Verifier> ScriptBuilder<V> {
         let imm_dependencies = compiled_script
             .immediate_dependencies_iter()
             .map(|(addr, name)| {
-                module_storage.fetch_or_create_verified_module(addr, name, |cm| {
+                module_storage.fetch_or_create_verified_module(addr, name, &|cm| {
                     ModuleBuilder::<V>::build(module_storage, struct_name_index_map, cm)
                 })
             })
@@ -50,7 +50,7 @@ pub struct ModuleBuilder<V: Verifier>(PhantomData<V>);
 
 impl<V: Verifier> ModuleBuilder<V> {
     pub(crate) fn build(
-        module_storage: &impl ModuleStorage,
+        module_storage: &dyn ModuleStorage,
         struct_name_index_map: &StructNameIndexMap,
         compiled_module: Arc<CompiledModule>,
     ) -> PartialVMResult<Module> {
@@ -58,13 +58,10 @@ impl<V: Verifier> ModuleBuilder<V> {
         V::verify_module(compiled_module.as_ref())?;
 
         // Fetch all dependencies of this module, ensuring they are verified as well.
+        let f = |cm| Self::build(module_storage, struct_name_index_map, cm);
         let imm_dependencies = compiled_module
             .immediate_dependencies_iter()
-            .map(|(addr, name)| {
-                module_storage.fetch_or_create_verified_module(addr, name, |cm| {
-                    Self::build(module_storage, struct_name_index_map, cm)
-                })
-            })
+            .map(|(addr, name)| module_storage.fetch_or_create_verified_module(addr, name, &f))
             .collect::<PartialVMResult<Vec<_>>>()?;
 
         // Perform checks on modules with their dependencies.

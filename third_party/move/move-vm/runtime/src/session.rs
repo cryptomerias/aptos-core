@@ -9,6 +9,7 @@ use crate::{
     module_traversal::TraversalContext,
     move_vm::MoveVM,
     native_extensions::NativeContextExtensions,
+    storage::{dummy::DummyStorage, module_storage::ModuleStorage},
 };
 use bytes::Bytes;
 use move_binary_format::{compatibility::Compatibility, errors::*, file_format::LocalIndex};
@@ -79,6 +80,8 @@ impl<'r, 'l> Session<'r, 'l> {
             gas_meter,
             traversal_context,
             &mut self.native_extensions,
+            &DummyStorage,
+            &DummyStorage,
         )?;
         Ok(())
     }
@@ -99,6 +102,7 @@ impl<'r, 'l> Session<'r, 'l> {
             &ty_args,
             &mut self.data_cache,
             &self.module_store,
+            &DummyStorage,
         )?;
 
         self.move_vm.runtime.execute_function_instantiation(
@@ -109,6 +113,8 @@ impl<'r, 'l> Session<'r, 'l> {
             gas_meter,
             traversal_context,
             &mut self.native_extensions,
+            &DummyStorage,
+            &DummyStorage,
         )
     }
 
@@ -127,6 +133,8 @@ impl<'r, 'l> Session<'r, 'l> {
             gas_meter,
             traversal_context,
             &mut self.native_extensions,
+            &DummyStorage,
+            &DummyStorage,
         )
     }
 
@@ -163,6 +171,8 @@ impl<'r, 'l> Session<'r, 'l> {
             gas_meter,
             traversal_context,
             &mut self.native_extensions,
+            &DummyStorage,
+            &DummyStorage,
         )
     }
 
@@ -216,6 +226,7 @@ impl<'r, 'l> Session<'r, 'l> {
             &self.module_store,
             gas_meter,
             Compatibility::full_check(),
+            &DummyStorage,
         )
     }
 
@@ -234,6 +245,7 @@ impl<'r, 'l> Session<'r, 'l> {
             &self.module_store,
             gas_meter,
             compat_config,
+            &DummyStorage,
         )
     }
 
@@ -250,6 +262,7 @@ impl<'r, 'l> Session<'r, 'l> {
             &self.module_store,
             gas_meter,
             Compatibility::no_check(),
+            &DummyStorage,
         )
     }
 
@@ -309,15 +322,22 @@ impl<'r, 'l> Session<'r, 'l> {
     /// that is owned by the data store.
     pub fn load_resource(
         &mut self,
+        module_storage: &impl ModuleStorage,
         addr: AccountAddress,
         ty: &Type,
     ) -> PartialVMResult<(&mut GlobalValue, Option<NumBytes>)> {
-        self.data_cache
-            .load_resource(self.move_vm.runtime.loader(), addr, ty, &self.module_store)
+        self.data_cache.load_resource(
+            self.move_vm.runtime.loader(),
+            module_storage,
+            addr,
+            ty,
+            &self.module_store,
+        )
     }
 
     /// Get the serialized format of a `CompiledModule` given a `ModuleId`.
     pub fn load_module(&self, module_id: &ModuleId) -> VMResult<Bytes> {
+        // TODO: This function should be removed...
         self.data_cache
             .load_module(module_id)
             .map_err(|e| e.finish(Location::Undefined))
@@ -339,6 +359,8 @@ impl<'r, 'l> Session<'r, 'l> {
             ty_args,
             &mut self.data_cache,
             &self.module_store,
+            &DummyStorage,
+            &DummyStorage,
         )
     }
 
@@ -358,6 +380,7 @@ impl<'r, 'l> Session<'r, 'l> {
                 expected_return_type,
                 &mut self.data_cache,
                 &self.module_store,
+                &DummyStorage,
             )
     }
 
@@ -374,32 +397,46 @@ impl<'r, 'l> Session<'r, 'l> {
             ty_args,
             &mut self.data_cache,
             &self.module_store,
+            &DummyStorage,
         )
     }
 
     pub fn load_type(&mut self, type_tag: &TypeTag) -> VMResult<Type> {
-        self.move_vm
-            .runtime
-            .loader()
-            .load_type(type_tag, &mut self.data_cache, &self.module_store)
+        self.move_vm.runtime.loader().load_type(
+            type_tag,
+            &mut self.data_cache,
+            &self.module_store,
+            &DummyStorage,
+        )
     }
 
-    pub fn get_type_layout(&mut self, type_tag: &TypeTag) -> VMResult<MoveTypeLayout> {
+    pub fn get_type_layout(
+        &mut self,
+        type_tag: &TypeTag,
+        module_storage: &impl ModuleStorage,
+    ) -> VMResult<MoveTypeLayout> {
         self.move_vm.runtime.loader().get_type_layout(
             type_tag,
             &mut self.data_cache,
             &self.module_store,
+            module_storage,
         )
     }
 
     pub fn get_fully_annotated_type_layout(
         &mut self,
         type_tag: &TypeTag,
+        module_storage: &impl ModuleStorage,
     ) -> VMResult<MoveTypeLayout> {
         self.move_vm
             .runtime
             .loader()
-            .get_fully_annotated_type_layout(type_tag, &mut self.data_cache, &self.module_store)
+            .get_fully_annotated_type_layout(
+                type_tag,
+                &mut self.data_cache,
+                &self.module_store,
+                module_storage,
+            )
     }
 
     pub fn get_type_tag(&self, ty: &Type) -> VMResult<TypeTag> {
@@ -427,16 +464,24 @@ impl<'r, 'l> Session<'r, 'l> {
         self.move_vm.runtime.loader().ty_builder()
     }
 
-    pub fn get_struct_type(&self, index: StructNameIndex) -> Option<Arc<StructType>> {
+    pub fn get_struct_type(&self, idx: StructNameIndex) -> Option<Arc<StructType>> {
         match self.move_vm.runtime.loader() {
             Loader::V1(loader) => {
-                let name = loader.name_cache.idx_to_identifier(index);
+                let name = loader.name_cache.idx_to_identifier(idx);
                 self.module_store
                     .get_struct_type_by_identifier(&name.name, &name.module)
                     .ok()
             },
-            Loader::V2(_) => {
-                unimplemented!()
+            Loader::V2(loader) => {
+                let name = loader.struct_name_index_map.idx_to_struct_name(idx);
+                loader
+                    .load_struct_ty(
+                        &DummyStorage,
+                        name.module.address(),
+                        name.module.name(),
+                        name.name.as_ident_str(),
+                    )
+                    .ok()
             },
         }
     }
@@ -461,6 +506,7 @@ impl<'r, 'l> Session<'r, 'l> {
                 &mut traversal_context.visited,
                 traversal_context.referenced_modules,
                 ids,
+                &DummyStorage,
             )
     }
 
@@ -479,6 +525,8 @@ impl<'r, 'l> Session<'r, 'l> {
                 gas_meter,
                 traversal_context,
                 script.borrow(),
+                &DummyStorage,
+                &DummyStorage,
             )
     }
 }

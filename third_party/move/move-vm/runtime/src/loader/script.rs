@@ -5,9 +5,7 @@ use super::{
     intern_type, BinaryCache, Function, FunctionHandle, FunctionInstantiation,
     ModuleStorageAdapter, Scope, ScriptHash, StructNameCache,
 };
-use crate::storage::{
-    module_storage::ModuleStorage as ModuleStorageV2, struct_name_index_map::StructNameIndexMap,
-};
+use crate::storage::{module_storage::ModuleStorage, struct_name_index_map::StructNameIndexMap};
 use move_binary_format::{
     access::ScriptAccess,
     binary_views::BinaryIndexedView,
@@ -26,7 +24,7 @@ use std::{collections::BTreeMap, sync::Arc};
 // When code executes, indices in instructions are resolved against runtime structures
 // (rather than "compiled") to make available data needed for execution.
 #[derive(Clone, Debug)]
-pub(crate) struct Script {
+pub struct Script {
     // primitive pools
     pub(crate) script: Arc<CompiledScript>,
 
@@ -44,7 +42,7 @@ pub(crate) struct Script {
 
 impl Script {
     pub(crate) fn new_v2(
-        _module_storage: &impl ModuleStorageV2,
+        _module_storage: &dyn ModuleStorage,
         _struct_name_index_map: &StructNameIndexMap,
         _compiled_script: Arc<CompiledScript>,
         // Note: possibly we need to take script's hash for scope.

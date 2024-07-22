@@ -10,10 +10,9 @@ use crate::{
     },
 };
 use move_binary_format::{errors::PartialVMResult, file_format::CompiledScript, CompiledModule};
-use move_core_types::{account_address::AccountAddress, identifier::IdentStr};
+use move_core_types::{account_address::AccountAddress, identifier::IdentStr, metadata::Metadata};
 use std::sync::Arc;
 
-#[allow(dead_code)]
 pub struct DummyStorage;
 
 impl ModuleStorage for DummyStorage {
@@ -33,6 +32,14 @@ impl ModuleStorage for DummyStorage {
         todo!()
     }
 
+    fn fetch_module_metadata(
+        &self,
+        _address: &AccountAddress,
+        _module_name: &IdentStr,
+    ) -> PartialVMResult<&[Metadata]> {
+        todo!()
+    }
+
     fn fetch_deserialized_module(
         &self,
         _address: &AccountAddress,
@@ -41,11 +48,11 @@ impl ModuleStorage for DummyStorage {
         todo!()
     }
 
-    fn fetch_or_create_verified_module<F: Fn(Arc<CompiledModule>) -> PartialVMResult<Module>>(
+    fn fetch_or_create_verified_module(
         &self,
         _address: &AccountAddress,
         _module_name: &IdentStr,
-        _f: F,
+        _f: &dyn Fn(Arc<CompiledModule>) -> PartialVMResult<Module>,
     ) -> PartialVMResult<Arc<Module>> {
         todo!()
     }
@@ -59,10 +66,10 @@ impl ScriptStorage for DummyStorage {
         todo!()
     }
 
-    fn fetch_or_create_verified_script<F: Fn(Arc<CompiledScript>) -> PartialVMResult<Script>>(
+    fn fetch_or_create_verified_script(
         &self,
         _serialized_script: &[u8],
-        _f: F,
+        _f: &dyn Fn(Arc<CompiledScript>) -> PartialVMResult<Script>,
     ) -> PartialVMResult<Arc<Script>> {
         todo!()
     }

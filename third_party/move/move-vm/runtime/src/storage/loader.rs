@@ -23,7 +23,7 @@ use move_core_types::{
     account_address::AccountAddress,
     gas_algebra::NumBytes,
     identifier::IdentStr,
-    language_storage::{ModuleId, StructTag, TypeTag},
+    language_storage::{ModuleId, TypeTag},
     value::MoveTypeLayout,
     vm_status::StatusCode,
 };
@@ -38,7 +38,7 @@ use typed_arena::Arena;
 pub(crate) struct LoaderV2<V: Verifier> {
     // Map to from struct names to indices, to save on unnecessary cloning and
     // reduce memory consumption.
-    struct_name_index_map: StructNameIndexMap,
+    pub(crate) struct_name_index_map: StructNameIndexMap,
     // Configuration of the VM, which own this loader. Contains information about
     // enabled checks, etc.
     vm_config: VMConfig,
@@ -51,13 +51,14 @@ pub(crate) struct LoaderV2<V: Verifier> {
 
     // Maps a struct to the corresponding type depth formula (since structs can be
     // generic, we do not know depths of non-instantiated types).
+    // SAFETY:
+    //   Every struct has the same depth formula even after upgrade.
     #[allow(dead_code)]
     depth_formula_cache: RwLock<hashbrown::HashMap<StructNameIndex, DepthFormula>>,
-    // TODO(George): Add type cache here.
+    // TODO(George): Add remaining type caches here for layouts and tags.
 }
 
 impl<V: Verifier> LoaderV2<V> {
-    #[allow(dead_code)]
     pub(crate) fn check_script_dependencies_and_check_gas(
         &self,
         module_storage: &impl ModuleStorage,
@@ -144,7 +145,6 @@ impl<V: Verifier> LoaderV2<V> {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub(crate) fn load_script(
         &self,
         module_storage: &impl ModuleStorage,
@@ -153,7 +153,7 @@ impl<V: Verifier> LoaderV2<V> {
         ty_args: &[TypeTag],
     ) -> VMResult<LoadedFunction> {
         let main = script_storage
-            .fetch_or_create_verified_script(serialized_script, |cs| {
+            .fetch_or_create_verified_script(serialized_script, &|cs| {
                 ScriptBuilder::<V>::build(module_storage, &self.struct_name_index_map, cs)
             })
             .map_err(|e| e.finish(Location::Script))?
@@ -178,15 +178,14 @@ impl<V: Verifier> LoaderV2<V> {
         })
     }
 
-    #[allow(dead_code)]
     pub(crate) fn load_module(
         &self,
-        module_storage: &impl ModuleStorage,
+        module_storage: &dyn ModuleStorage,
         address: &AccountAddress,
         module_name: &IdentStr,
     ) -> VMResult<Arc<Module>> {
         module_storage
-            .fetch_or_create_verified_module(address, module_name, |cm| {
+            .fetch_or_create_verified_module(address, module_name, &|cm| {
                 ModuleBuilder::<V>::build(module_storage, &self.struct_name_index_map, cm)
             })
             .map_err(|e| {
@@ -197,10 +196,9 @@ impl<V: Verifier> LoaderV2<V> {
             })
     }
 
-    #[allow(dead_code)]
     pub(crate) fn load_function_without_ty_args(
         &self,
-        module_storage: &impl ModuleStorage,
+        module_storage: &dyn ModuleStorage,
         address: &AccountAddress,
         module_name: &IdentStr,
         function_name: &IdentStr,
@@ -224,18 +222,20 @@ impl<V: Verifier> LoaderV2<V> {
     pub(crate) fn load_struct_ty(
         &self,
         module_storage: &impl ModuleStorage,
-        struct_tag: &StructTag,
+        address: &AccountAddress,
+        module_name: &IdentStr,
+        struct_name: &IdentStr,
     ) -> VMResult<Arc<StructType>> {
-        let module = self.load_module(module_storage, &struct_tag.address, &struct_tag.module)?;
+        let module = self.load_module(module_storage, address, module_name)?;
         Ok(module
             .struct_map
-            .get(&struct_tag.name)
+            .get(struct_name)
             .and_then(|idx| module.structs.get(*idx))
             .ok_or_else(|| {
                 PartialVMError::new(StatusCode::TYPE_RESOLUTION_FAILURE)
                     .with_message(format!(
                         "Struct {}::{}::{} does not exist",
-                        &struct_tag.address, &struct_tag.module, &struct_tag.name
+                        address, module_name, struct_name
                     ))
                     .finish(Location::Undefined)
             })?
@@ -248,57 +248,63 @@ impl<V: Verifier> LoaderV2<V> {
         module_storage: &impl ModuleStorage,
         ty_tag: &TypeTag,
     ) -> VMResult<Type> {
-        self.ty_builder()
-            .create_ty(ty_tag, |st| self.load_struct_ty(module_storage, st))
+        self.ty_builder().create_ty(ty_tag, |st| {
+            self.load_struct_ty(
+                module_storage,
+                &st.address,
+                st.module.as_ident_str(),
+                st.name.as_ident_str(),
+            )
+        })
     }
 
-    #[allow(dead_code)]
     pub(crate) fn verify_modules_for_publication(
         &self,
         _module_storage: &impl ModuleStorage,
         _modules: &[CompiledModule],
     ) -> VMResult<()> {
+        // TODO: add type cache and implement in a nicer way, or reuse that code.
         unimplemented!()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn ty_to_ty_layout_with_identifier_mappings(
         &self,
-        _module_storage: &impl ModuleStorage,
+        _module_storage: &dyn ModuleStorage,
         _ty: &Type,
     ) -> PartialVMResult<(MoveTypeLayout, bool)> {
+        // TODO: add type cache and implement in a nicer way, or reuse that code.
         unimplemented!()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn ty_to_ty_layout(
         &self,
-        _module_storage: &impl ModuleStorage,
+        _module_storage: &dyn ModuleStorage,
         _ty: &Type,
     ) -> PartialVMResult<MoveTypeLayout> {
+        // TODO: add type cache and implement in a nicer way, or reuse that code.
         unimplemented!()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn ty_to_fully_annotated_ty_layout(
         &self,
-        _module_storage: &impl ModuleStorage,
+        _module_storage: &dyn ModuleStorage,
         _ty: &Type,
     ) -> PartialVMResult<MoveTypeLayout> {
+        // TODO: add type cache and implement in a nicer way, or reuse that code.
         unimplemented!()
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn type_to_type_tag(&self, _ty: &Type) -> PartialVMResult<TypeTag> {
+    pub(crate) fn ty_to_ty_tag(&self, _ty: &Type) -> PartialVMResult<TypeTag> {
+        // TODO: add type cache and implement in a nicer way, or reuse that code.
         unimplemented!()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn calculate_depth_of_struct(
         &self,
-        _module_storage: &impl ModuleStorage,
+        _module_storage: &dyn ModuleStorage,
         _struct_name_idx: StructNameIndex,
     ) -> PartialVMResult<DepthFormula> {
+        // TODO: add type cache and implement in a nicer way, or reuse that code.
         unimplemented!()
     }
 

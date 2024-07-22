@@ -5,7 +5,7 @@
 use crate::{
     data_cache::TransactionDataCache,
     interpreter::Interpreter,
-    loader::{Function, Resolver},
+    loader::{Function, Loader, Resolver},
     module_traversal::TraversalContext,
     native_extensions::NativeContextExtensions,
 };
@@ -140,6 +140,7 @@ impl<'a, 'b, 'c> NativeContext<'a, 'b, 'c> {
             .data_store
             .load_resource(
                 self.resolver.loader(),
+                self.resolver.module_storage(),
                 address,
                 type_,
                 self.resolver.module_store(),
@@ -198,21 +199,32 @@ impl<'a, 'b, 'c> NativeContext<'a, 'b, 'c> {
         module: &ModuleId,
         function_name: &Identifier,
     ) -> PartialVMResult<Arc<Function>> {
-        // Load the module that contains this function regardless of the traversal context.
-        //
-        // This is just a precautionary step to make sure that caching status of the VM will not alter execution
-        // result in case framework code forgot to use LoadFunction result to load the modules into cache
-        // and charge properly.
-        self.resolver
-            .loader()
-            .load_module(module, self.data_store, self.resolver.module_store())
-            .map_err(|_| {
-                PartialVMError::new(StatusCode::FUNCTION_RESOLUTION_FAILURE)
-                    .with_message(format!("Module {} doesn't exist", module))
-            })?;
+        match self.resolver.loader() {
+            Loader::V1(loader) => {
+                // Load the module that contains this function regardless of the traversal context.
+                //
+                // This is just a precautionary step to make sure that caching status of the VM will not alter execution
+                // result in case framework code forgot to use LoadFunction result to load the modules into cache
+                // and charge properly.
+                loader
+                    .load_module(module, self.data_store, self.resolver.module_store())
+                    .map_err(|_| {
+                        PartialVMError::new(StatusCode::FUNCTION_RESOLUTION_FAILURE)
+                            .with_message(format!("Module {} doesn't exist", module))
+                    })?;
 
-        self.resolver
-            .module_store()
-            .resolve_function_by_name(function_name, module)
+                self.resolver
+                    .module_store()
+                    .resolve_function_by_name(function_name, module)
+            },
+            Loader::V2(loader) => loader
+                .load_function_without_ty_args(
+                    self.resolver.module_storage(),
+                    module.address(),
+                    module.name(),
+                    function_name,
+                )
+                .map_err(|e| e.to_partial()),
+        }
     }
 }

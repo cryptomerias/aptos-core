@@ -33,3 +33,6 @@ mod access_control;
 mod storage;
 
 pub use loader::LoadedFunction;
+pub use storage::{
+    dummy::DummyStorage, module_storage::ModuleStorage, script_storage::ScriptStorage,
+};

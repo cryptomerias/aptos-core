@@ -22,6 +22,7 @@ use move_vm_runtime::{
     native_extensions::NativeContextExtensions,
     native_functions::NativeFunction,
     session::{SerializedReturnValues, Session},
+    DummyStorage,
 };
 use move_vm_test_utils::gas_schedule::{Gas, GasStatus};
 use move_vm_types::{
@@ -188,7 +189,7 @@ impl<'r, 'l> AsyncSession<'r, 'l> {
         // Check whether the actor state already exists.
         let state = self
             .vm_session
-            .load_resource(actor_addr, &state_type)
+            .load_resource(&DummyStorage, actor_addr, &state_type)
             .map(|(gv, _)| gv)
             .map_err(partial_vm_error_to_async)?;
         if state.exists().map_err(partial_vm_error_to_async)? {
@@ -283,7 +284,7 @@ impl<'r, 'l> AsyncSession<'r, 'l> {
 
         let actor_state_global = self
             .vm_session
-            .load_resource(actor_addr, &state_type)
+            .load_resource(&DummyStorage, actor_addr, &state_type)
             .map(|(gv, _)| gv)
             .map_err(partial_vm_error_to_async)?;
         let actor_state = actor_state_global
@@ -357,7 +358,7 @@ impl<'r, 'l> AsyncSession<'r, 'l> {
     fn to_bcs(&mut self, value: Value, tag: &TypeTag) -> PartialVMResult<Vec<u8>> {
         let type_layout = self
             .vm_session
-            .get_type_layout(tag)
+            .get_type_layout(tag, &DummyStorage)
             .map_err(|e| e.to_partial())?;
         value
             .simple_serialize(&type_layout)

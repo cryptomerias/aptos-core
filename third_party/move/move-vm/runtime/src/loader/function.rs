@@ -8,6 +8,7 @@ use crate::{
         ScriptHash,
     },
     native_functions::{NativeFunction, NativeFunctions, UnboxedNativeFunction},
+    storage::{module_storage::ModuleStorage, script_storage::ScriptStorage},
 };
 use move_binary_format::{
     access::ModuleAccess,
@@ -189,17 +190,24 @@ impl Function {
         &self,
         loader: &'a Loader,
         module_store: &'a ModuleStorageAdapter,
+        module_storage: &'a impl ModuleStorage,
+        script_storage: &'a impl ScriptStorage,
     ) -> Resolver<'a> {
         match &self.scope {
             Scope::Module(module_id) => {
-                let module = module_store
-                    .module_at(module_id)
-                    .expect("ModuleId on Function must exist");
-                Resolver::for_module(loader, module_store, module)
+                let module = match loader {
+                    Loader::V1(_) => module_store
+                        .module_at(module_id)
+                        .expect("ModuleId on Function must exist"),
+                    Loader::V2(loader) => loader
+                        .load_module(module_storage, module_id.address(), module_id.name())
+                        .expect("ModuleId on Function must exist"),
+                };
+                Resolver::for_module(loader, module_store, module, module_storage)
             },
             Scope::Script(script_hash) => {
-                let script = loader.get_script(script_hash);
-                Resolver::for_script(loader, module_store, script)
+                let script = loader.get_script(script_hash, script_storage);
+                Resolver::for_script(loader, module_store, script, module_storage)
             },
         }
     }

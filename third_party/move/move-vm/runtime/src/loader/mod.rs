@@ -5,6 +5,7 @@
 use crate::{
     config::VMConfig, data_cache::TransactionDataCache, logging::expect_no_verification_errors,
     module_traversal::TraversalContext, native_functions::NativeFunctions,
+    storage::module_storage::ModuleStorage as ModuleStorageV2,
 };
 use hashbrown::Equivalent;
 use lazy_static::lazy_static;
@@ -50,7 +51,12 @@ mod modules;
 mod script;
 mod type_loader;
 
-use crate::storage::{dummy::DummyVerifier, loader::LoaderV2, modules::{StructVariantInfo, VariantFieldInfo}};
+use crate::storage::{
+    dummy::DummyVerifier,
+    loader::LoaderV2,
+    modules::{StructVariantInfo, VariantFieldInfo},
+    script_storage::{ScriptHash as ScriptHashV2, ScriptStorage},
+};
 pub use function::LoadedFunction;
 pub(crate) use function::{Function, FunctionHandle, FunctionInstantiation, Scope};
 pub(crate) use modules::{Module, ModuleCache, ModuleStorage, ModuleStorageAdapter};
@@ -228,6 +234,8 @@ impl Loader {
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext,
         script_blob: &[u8],
+        module_storage: &impl ModuleStorageV2,
+        script_storage: &impl ScriptStorage,
     ) -> VMResult<()> {
         match self {
             Self::V1(loader) => loader.check_script_dependencies_and_check_gas(
@@ -237,9 +245,13 @@ impl Loader {
                 traversal_context,
                 script_blob,
             ),
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.check_script_dependencies_and_check_gas(
+                module_storage,
+                script_storage,
+                gas_meter,
+                traversal_context,
+                script_blob,
+            ),
         }
     }
 
@@ -251,6 +263,7 @@ impl Loader {
         visited: &mut BTreeMap<(&'a AccountAddress, &'a IdentStr), ()>,
         referenced_modules: &'a Arena<Arc<CompiledModule>>,
         ids: I,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<()>
     where
         I: IntoIterator<Item = (&'a AccountAddress, &'a IdentStr)>,
@@ -265,9 +278,13 @@ impl Loader {
                 referenced_modules,
                 ids,
             ),
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.check_dependencies_and_charge_gas(
+                module_storage,
+                gas_meter,
+                visited,
+                referenced_modules,
+                ids,
+            ),
         }
     }
 
@@ -277,11 +294,13 @@ impl Loader {
         ty_args: &[TypeTag],
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
+        script_storage: &impl ScriptStorage,
     ) -> VMResult<LoadedFunction> {
         match self {
             Self::V1(loader) => loader.load_script(script_blob, ty_args, data_store, module_store),
-            Self::V2(_) => {
-                unimplemented!()
+            Self::V2(loader) => {
+                loader.load_script(module_storage, script_storage, script_blob, ty_args)
             },
         }
     }
@@ -291,12 +310,11 @@ impl Loader {
         id: &ModuleId,
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<Arc<Module>> {
         match self {
             Loader::V1(loader) => loader.load_module(id, data_store, module_store),
-            Loader::V2(_) => {
-                unimplemented!()
-            },
+            Loader::V2(loader) => loader.load_module(module_storage, id.address(), id.name()),
         }
     }
 
@@ -306,6 +324,7 @@ impl Loader {
         function_name: &IdentStr,
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<Arc<Function>> {
         match self {
             Loader::V1(loader) => {
@@ -315,9 +334,12 @@ impl Loader {
                     .resolve_function_by_name(function_name, module_id)
                     .map_err(|err| err.finish(Location::Undefined))
             },
-            Loader::V2(_) => {
-                unimplemented!()
-            },
+            Loader::V2(loader) => loader.load_function_without_ty_args(
+                module_storage,
+                module_id.address(),
+                module_id.name(),
+                function_name,
+            ),
         }
     }
 
@@ -332,12 +354,14 @@ impl Loader {
         expected_return_type: &Type,
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<LoadedFunction> {
         let function = self.load_function_without_type_args(
             module_id,
             function_name,
             data_store,
             module_store,
+            module_storage,
         )?;
 
         if function.return_tys().len() != 1 {
@@ -385,17 +409,19 @@ impl Loader {
         ty_args: &[TypeTag],
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<LoadedFunction> {
         let function = self.load_function_without_type_args(
             module_id,
             function_name,
             data_store,
             module_store,
+            module_storage,
         )?;
 
         let ty_args = ty_args
             .iter()
-            .map(|ty_arg| self.load_type(ty_arg, data_store, module_store))
+            .map(|ty_arg| self.load_type(ty_arg, data_store, module_store, module_storage))
             .collect::<VMResult<Vec<_>>>()
             .map_err(|mut err| {
                 // User provided type argument failed to load. Set extra sub status to distinguish from internal type loading error.
@@ -416,14 +442,13 @@ impl Loader {
         modules: &[CompiledModule],
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<()> {
         match self {
             Self::V1(loader) => {
                 loader.verify_module_bundle_for_publication(modules, data_store, module_store)
             },
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.verify_modules_for_publication(module_storage, modules),
         }
     }
 
@@ -431,12 +456,11 @@ impl Loader {
         &self,
         struct_idx: StructNameIndex,
         module_store: &ModuleStorageAdapter,
+        module_storage: &dyn ModuleStorageV2,
     ) -> PartialVMResult<DepthFormula> {
         match self {
             Self::V1(loader) => loader.calculate_depth_of_struct(struct_idx, module_store),
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.calculate_depth_of_struct(module_storage, struct_idx),
         }
     }
 
@@ -451,9 +475,7 @@ impl Loader {
                 };
                 loader.type_to_type_tag_impl(ty, &mut gas_context)
             },
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.ty_to_ty_tag(ty),
         }
     }
 
@@ -461,15 +483,14 @@ impl Loader {
         &self,
         ty: &Type,
         module_store: &ModuleStorageAdapter,
+        module_storage: &dyn ModuleStorageV2,
     ) -> PartialVMResult<(MoveTypeLayout, bool)> {
         match self {
             Self::V1(loader) => {
                 let mut count = 0;
                 loader.type_to_type_layout_impl(ty, module_store, &mut count, 1)
             },
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.ty_to_ty_layout_with_identifier_mappings(module_storage, ty),
         }
     }
 
@@ -477,6 +498,7 @@ impl Loader {
         &self,
         ty: &Type,
         module_store: &ModuleStorageAdapter,
+        module_storage: &dyn ModuleStorageV2,
     ) -> PartialVMResult<MoveTypeLayout> {
         match self {
             Self::V1(loader) => {
@@ -485,9 +507,7 @@ impl Loader {
                     loader.type_to_type_layout_impl(ty, module_store, &mut count, 1)?;
                 Ok(layout)
             },
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.ty_to_ty_layout(module_storage, ty),
         }
     }
 
@@ -495,15 +515,14 @@ impl Loader {
         &self,
         ty: &Type,
         module_store: &ModuleStorageAdapter,
+        module_storage: &dyn ModuleStorageV2,
     ) -> PartialVMResult<MoveTypeLayout> {
         match self {
             Self::V1(loader) => {
                 let mut count = 0;
                 loader.type_to_fully_annotated_layout_impl(ty, module_store, &mut count, 1)
             },
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.ty_to_fully_annotated_ty_layout(module_storage, ty),
         }
     }
 
@@ -516,12 +535,11 @@ impl Loader {
         ty_tag: &TypeTag,
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<Type> {
         match self {
             Self::V1(loader) => loader.load_type(ty_tag, data_store, module_store),
-            Self::V2(_) => {
-                unimplemented!()
-            },
+            Self::V2(loader) => loader.load_ty(module_storage, ty_tag),
         }
     }
 
@@ -535,11 +553,11 @@ impl Loader {
     ) -> MappedRwLockReadGuard<StructIdentifier> {
         match self {
             Self::V1(loader) => loader.name_cache.idx_to_identifier(struct_idx),
-            Self::V2(_) => unimplemented!(),
+            Self::V2(loader) => loader.struct_name_index_map.idx_to_struct_name(struct_idx),
         }
     }
 
-    fn get_script(&self, hash: &ScriptHash) -> Arc<Script> {
+    fn get_script(&self, hash: &ScriptHash, script_storage: &impl ScriptStorage) -> Arc<Script> {
         match self {
             Self::V1(loader) => Arc::clone(
                 loader
@@ -550,7 +568,10 @@ impl Loader {
                     .expect("Script hash on Function must exist"),
             ),
             Self::V2(_) => {
-                unimplemented!()
+                // To fetch a script, we can directly get it from the script storage.
+                // TODO: Unify script hashes...
+                let hash = ScriptHashV2(*hash);
+                script_storage.fetch_existing_verified_script(&hash)
             },
         }
     }
@@ -1273,6 +1294,8 @@ pub(crate) struct Resolver<'a> {
     loader: &'a Loader,
     module_store: &'a ModuleStorageAdapter,
     binary: BinaryType,
+
+    module_storage: &'a dyn ModuleStorageV2,
 }
 
 impl<'a> Resolver<'a> {
@@ -1280,12 +1303,14 @@ impl<'a> Resolver<'a> {
         loader: &'a Loader,
         module_store: &'a ModuleStorageAdapter,
         module: Arc<Module>,
+        module_storage: &'a impl ModuleStorageV2,
     ) -> Self {
         let binary = BinaryType::Module(module);
         Self {
             loader,
             binary,
             module_store,
+            module_storage,
         }
     }
 
@@ -1293,12 +1318,14 @@ impl<'a> Resolver<'a> {
         loader: &'a Loader,
         module_store: &'a ModuleStorageAdapter,
         script: Arc<Script>,
+        module_storage: &'a impl ModuleStorageV2,
     ) -> Self {
         let binary = BinaryType::Script(script);
         Self {
             loader,
             binary,
             module_store,
+            module_storage,
         }
     }
 
@@ -1321,14 +1348,22 @@ impl<'a> Resolver<'a> {
         &self,
         idx: FunctionHandleIndex,
     ) -> PartialVMResult<Arc<Function>> {
-        let idx = match &self.binary {
+        let handle = match &self.binary {
             BinaryType::Module(module) => module.function_at(idx.0),
             BinaryType::Script(script) => script.function_at(idx.0),
         };
         match self.loader() {
-            Loader::V1(_) => self.module_store.function_at(idx),
-            Loader::V2(_) => {
-                unimplemented!()
+            Loader::V1(_) => self.module_store.function_at(handle),
+            Loader::V2(loader) => match handle {
+                FunctionHandle::Local(func) => Ok(func.clone()),
+                FunctionHandle::Remote { module, name } => loader
+                    .load_function_without_ty_args(
+                        self.module_storage,
+                        module.address(),
+                        module.name(),
+                        name.as_ident_str(),
+                    )
+                    .map_err(|e| e.to_partial()),
             },
         }
     }
@@ -1343,8 +1378,16 @@ impl<'a> Resolver<'a> {
         };
         match self.loader() {
             Loader::V1(_) => self.module_store.function_at(&func_inst.handle),
-            Loader::V2(_) => {
-                unimplemented!()
+            Loader::V2(loader) => match &func_inst.handle {
+                FunctionHandle::Local(func) => Ok(func.clone()),
+                FunctionHandle::Remote { module, name } => loader
+                    .load_function_without_ty_args(
+                        self.module_storage,
+                        module.address(),
+                        module.name(),
+                        name.as_ident_str(),
+                    )
+                    .map_err(|e| e.to_partial()),
             },
         }
     }
@@ -1358,9 +1401,14 @@ impl<'a> Resolver<'a> {
             Loader::V1(_) => self
                 .module_store
                 .resolve_function_by_name(func_name, module_id),
-            Loader::V2(_) => {
-                unimplemented!()
-            },
+            Loader::V2(loader) => loader
+                .load_function_without_ty_args(
+                    self.module_storage,
+                    module_id.address(),
+                    module_id.name(),
+                    func_name,
+                )
+                .map_err(|e| e.to_partial()),
         }
     }
 
@@ -1652,15 +1700,19 @@ impl<'a> Resolver<'a> {
     }
 
     pub(crate) fn type_to_type_layout(&self, ty: &Type) -> PartialVMResult<MoveTypeLayout> {
-        self.loader.type_to_type_layout(ty, self.module_store)
+        self.loader
+            .type_to_type_layout(ty, self.module_store, self.module_storage)
     }
 
     pub(crate) fn type_to_type_layout_with_identifier_mappings(
         &self,
         ty: &Type,
     ) -> PartialVMResult<(MoveTypeLayout, bool)> {
-        self.loader
-            .type_to_type_layout_with_identifier_mappings(ty, self.module_store)
+        self.loader.type_to_type_layout_with_identifier_mappings(
+            ty,
+            self.module_store,
+            self.module_storage,
+        )
     }
 
     pub(crate) fn type_to_fully_annotated_layout(
@@ -1668,7 +1720,7 @@ impl<'a> Resolver<'a> {
         ty: &Type,
     ) -> PartialVMResult<MoveTypeLayout> {
         self.loader
-            .type_to_fully_annotated_layout(ty, self.module_store)
+            .type_to_fully_annotated_layout(ty, self.module_store, self.module_storage)
     }
 
     pub(crate) fn loader(&self) -> &Loader {
@@ -1677,6 +1729,10 @@ impl<'a> Resolver<'a> {
 
     pub(crate) fn module_store(&self) -> &ModuleStorageAdapter {
         self.module_store
+    }
+
+    pub(crate) fn module_storage(&self) -> &dyn ModuleStorageV2 {
+        self.module_storage
     }
 }
 
@@ -2295,10 +2351,16 @@ impl Loader {
         &self,
         type_tag: &TypeTag,
         move_storage: &mut TransactionDataCache,
-        module_storage: &ModuleStorageAdapter,
+        module_storage_adapter: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<MoveTypeLayout> {
-        let ty = self.load_type(type_tag, move_storage, module_storage)?;
-        self.type_to_type_layout(&ty, module_storage)
+        let ty = self.load_type(
+            type_tag,
+            move_storage,
+            module_storage_adapter,
+            module_storage,
+        )?;
+        self.type_to_type_layout(&ty, module_storage_adapter, module_storage)
             .map_err(|e| e.finish(Location::Undefined))
     }
 
@@ -2306,10 +2368,16 @@ impl Loader {
         &self,
         type_tag: &TypeTag,
         move_storage: &mut TransactionDataCache,
-        module_storage: &ModuleStorageAdapter,
+        module_storage_adapter: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
     ) -> VMResult<MoveTypeLayout> {
-        let ty = self.load_type(type_tag, move_storage, module_storage)?;
-        self.type_to_fully_annotated_layout(&ty, module_storage)
+        let ty = self.load_type(
+            type_tag,
+            move_storage,
+            module_storage_adapter,
+            module_storage,
+        )?;
+        self.type_to_fully_annotated_layout(&ty, module_storage_adapter, module_storage)
             .map_err(|e| e.finish(Location::Undefined))
     }
 }

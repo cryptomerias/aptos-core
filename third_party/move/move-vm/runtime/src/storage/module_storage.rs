@@ -3,7 +3,7 @@
 
 use crate::loader::Module;
 use move_binary_format::{errors::PartialVMResult, CompiledModule};
-use move_core_types::{account_address::AccountAddress, identifier::IdentStr};
+use move_core_types::{account_address::AccountAddress, identifier::IdentStr, metadata::Metadata};
 use std::sync::Arc;
 
 pub trait ModuleStorage {
@@ -19,16 +19,22 @@ pub trait ModuleStorage {
         module_name: &IdentStr,
     ) -> PartialVMResult<usize>;
 
+    fn fetch_module_metadata(
+        &self,
+        address: &AccountAddress,
+        module_name: &IdentStr,
+    ) -> PartialVMResult<&[Metadata]>;
+
     fn fetch_deserialized_module(
         &self,
         address: &AccountAddress,
         module_name: &IdentStr,
     ) -> PartialVMResult<Arc<CompiledModule>>;
 
-    fn fetch_or_create_verified_module<F: Fn(Arc<CompiledModule>) -> PartialVMResult<Module>>(
+    fn fetch_or_create_verified_module(
         &self,
         address: &AccountAddress,
         module_name: &IdentStr,
-        f: F,
+        f: &dyn Fn(Arc<CompiledModule>) -> PartialVMResult<Module>,
     ) -> PartialVMResult<Arc<Module>>;
 }

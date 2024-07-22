@@ -10,6 +10,7 @@ use crate::{
     native_functions::NativeFunction,
     runtime::VMRuntime,
     session::Session,
+    storage::dummy::DummyStorage,
 };
 use move_binary_format::{errors::VMResult, CompiledModule};
 use move_core_types::{
@@ -134,6 +135,9 @@ impl MoveVM {
                     remote,
                 ),
                 &ModuleStorageAdapter::new(self.runtime.module_storage()),
+                // Note(George): Use dummy here because we can change to direct metadata fetching in the caller,
+                //               and when creating VM we can prefetch the framework directly.
+                &DummyStorage,
             )
             .map(|arc_module| arc_module.arc_module())
     }
