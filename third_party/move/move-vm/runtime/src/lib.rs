@@ -30,5 +30,6 @@ pub mod module_traversal;
 mod debug;
 
 mod access_control;
+mod storage;
 
 pub use loader::LoadedFunction;

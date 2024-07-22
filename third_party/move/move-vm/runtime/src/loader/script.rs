@@ -5,6 +5,9 @@ use super::{
     intern_type, BinaryCache, Function, FunctionHandle, FunctionInstantiation,
     ModuleStorageAdapter, Scope, ScriptHash, StructNameCache,
 };
+use crate::storage::{
+    module_storage::ModuleStorage as ModuleStorageV2, struct_name_index_map::StructNameIndexMap,
+};
 use move_binary_format::{
     access::ScriptAccess,
     binary_views::BinaryIndexedView,
@@ -40,6 +43,15 @@ pub(crate) struct Script {
 }
 
 impl Script {
+    pub(crate) fn new_v2(
+        _module_storage: &impl ModuleStorageV2,
+        _struct_name_index_map: &StructNameIndexMap,
+        _compiled_script: Arc<CompiledScript>,
+        // Note: possibly we need to take script's hash for scope.
+    ) -> PartialVMResult<Self> {
+        unimplemented!()
+    }
+
     pub(crate) fn new(
         script: Arc<CompiledScript>,
         script_hash: &ScriptHash,

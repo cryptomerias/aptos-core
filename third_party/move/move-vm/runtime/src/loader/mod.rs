@@ -392,89 +392,6 @@ impl Loader {
             .map_err(|err| err.finish(Location::Undefined))
     }
 
-    // Matches the actual returned type to the expected type, binding any type args to the
-    // necessary type as stored in the map. The expected type must be a concrete type (no TyParam).
-    // Returns true if a successful match is made.
-    fn match_return_type<'a>(
-        returned: &Type,
-        expected: &'a Type,
-        map: &mut BTreeMap<u16, &'a Type>,
-    ) -> bool {
-        match (returned, expected) {
-            // The important case, deduce the type params
-            (Type::TyParam(idx), _) => match map.entry(*idx) {
-                btree_map::Entry::Vacant(vacant_entry) => {
-                    vacant_entry.insert(expected);
-                    true
-                },
-                btree_map::Entry::Occupied(occupied_entry) => *occupied_entry.get() == expected,
-            },
-            // Recursive types we need to recurse the matching types
-            (Type::Reference(ret_inner), Type::Reference(expected_inner))
-            | (Type::MutableReference(ret_inner), Type::MutableReference(expected_inner)) => {
-                Self::match_return_type(ret_inner, expected_inner, map)
-            },
-            (Type::Vector(ret_inner), Type::Vector(expected_inner)) => {
-                Self::match_return_type(ret_inner, expected_inner, map)
-            },
-            // Abilities should not contribute to the equality check as they just serve for caching computations.
-            // For structs the both need to be the same struct.
-            (
-                Type::Struct { idx: ret_idx, .. },
-                Type::Struct {
-                    idx: expected_idx, ..
-                },
-            ) => *ret_idx == *expected_idx,
-            // For struct instantiations we need to additionally match all type arguments
-            (
-                Type::StructInstantiation {
-                    idx: ret_idx,
-                    ty_args: ret_fields,
-                    ..
-                },
-                Type::StructInstantiation {
-                    idx: expected_idx,
-                    ty_args: expected_fields,
-                    ..
-                },
-            ) => {
-                *ret_idx == *expected_idx
-                    && ret_fields.len() == expected_fields.len()
-                    && ret_fields
-                        .iter()
-                        .zip(expected_fields.iter())
-                        .all(|types| Self::match_return_type(types.0, types.1, map))
-            },
-            // For primitive types we need to assure the types match
-            (Type::U8, Type::U8)
-            | (Type::U16, Type::U16)
-            | (Type::U32, Type::U32)
-            | (Type::U64, Type::U64)
-            | (Type::U128, Type::U128)
-            | (Type::U256, Type::U256)
-            | (Type::Bool, Type::Bool)
-            | (Type::Address, Type::Address)
-            | (Type::Signer, Type::Signer) => true,
-            // Otherwise the types do not match and we can't match return type to the expected type.
-            // Note we don't use the _ pattern but spell out all cases, so that the compiler will
-            // bark when a case is missed upon future updates to the types.
-            (Type::U8, _)
-            | (Type::U16, _)
-            | (Type::U32, _)
-            | (Type::U64, _)
-            | (Type::U128, _)
-            | (Type::U256, _)
-            | (Type::Bool, _)
-            | (Type::Address, _)
-            | (Type::Signer, _)
-            | (Type::Struct { .. }, _)
-            | (Type::StructInstantiation { .. }, _)
-            | (Type::Vector(_), _)
-            | (Type::MutableReference(_), _)
-            | (Type::Reference(_), _) => false,
-        }
-    }
-
     // Loading verifies the module if it was never loaded.
     // Type parameters are inferred from the expected return type. Returns an error if it's not
     // possible to infer the type parameters or return type cannot be matched.
@@ -500,7 +417,7 @@ impl Loader {
         }
 
         let mut map = BTreeMap::new();
-        if !Self::match_return_type(&function.return_tys()[0], expected_return_type, &mut map) {
+        if !match_return_type(&function.return_tys()[0], expected_return_type, &mut map) {
             // For functions that are marked constructor this should not happen.
             return Err(
                 PartialVMError::new(StatusCode::INVALID_MAIN_FUNCTION_SIGNATURE)
@@ -2174,5 +2091,88 @@ impl Loader {
         let ty = self.load_type(type_tag, move_storage, module_storage)?;
         self.type_to_fully_annotated_layout(&ty, module_storage)
             .map_err(|e| e.finish(Location::Undefined))
+    }
+}
+
+// Matches the actual returned type to the expected type, binding any type args to the
+// necessary type as stored in the map. The expected type must be a concrete type (no TyParam).
+// Returns true if a successful match is made.
+fn match_return_type<'a>(
+    returned: &Type,
+    expected: &'a Type,
+    map: &mut BTreeMap<u16, &'a Type>,
+) -> bool {
+    match (returned, expected) {
+        // The important case, deduce the type params
+        (Type::TyParam(idx), _) => match map.entry(*idx) {
+            btree_map::Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(expected);
+                true
+            },
+            btree_map::Entry::Occupied(occupied_entry) => *occupied_entry.get() == expected,
+        },
+        // Recursive types we need to recurse the matching types
+        (Type::Reference(ret_inner), Type::Reference(expected_inner))
+        | (Type::MutableReference(ret_inner), Type::MutableReference(expected_inner)) => {
+            match_return_type(ret_inner, expected_inner, map)
+        },
+        (Type::Vector(ret_inner), Type::Vector(expected_inner)) => {
+            match_return_type(ret_inner, expected_inner, map)
+        },
+        // Abilities should not contribute to the equality check as they just serve for caching computations.
+        // For structs the both need to be the same struct.
+        (
+            Type::Struct { idx: ret_idx, .. },
+            Type::Struct {
+                idx: expected_idx, ..
+            },
+        ) => *ret_idx == *expected_idx,
+        // For struct instantiations we need to additionally match all type arguments
+        (
+            Type::StructInstantiation {
+                idx: ret_idx,
+                ty_args: ret_fields,
+                ..
+            },
+            Type::StructInstantiation {
+                idx: expected_idx,
+                ty_args: expected_fields,
+                ..
+            },
+        ) => {
+            *ret_idx == *expected_idx
+                && ret_fields.len() == expected_fields.len()
+                && ret_fields
+                    .iter()
+                    .zip(expected_fields.iter())
+                    .all(|types| match_return_type(types.0, types.1, map))
+        },
+        // For primitive types we need to assure the types match
+        (Type::U8, Type::U8)
+        | (Type::U16, Type::U16)
+        | (Type::U32, Type::U32)
+        | (Type::U64, Type::U64)
+        | (Type::U128, Type::U128)
+        | (Type::U256, Type::U256)
+        | (Type::Bool, Type::Bool)
+        | (Type::Address, Type::Address)
+        | (Type::Signer, Type::Signer) => true,
+        // Otherwise the types do not match and we can't match return type to the expected type.
+        // Note we don't use the _ pattern but spell out all cases, so that the compiler will
+        // bark when a case is missed upon future updates to the types.
+        (Type::U8, _)
+        | (Type::U16, _)
+        | (Type::U32, _)
+        | (Type::U64, _)
+        | (Type::U128, _)
+        | (Type::U256, _)
+        | (Type::Bool, _)
+        | (Type::Address, _)
+        | (Type::Signer, _)
+        | (Type::Struct { .. }, _)
+        | (Type::StructInstantiation { .. }, _)
+        | (Type::Vector(_), _)
+        | (Type::MutableReference(_), _)
+        | (Type::Reference(_), _) => false,
     }
 }
