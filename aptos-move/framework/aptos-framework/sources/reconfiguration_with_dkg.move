@@ -1,6 +1,8 @@
 /// Async reconfiguration state management.
 module aptos_framework::reconfiguration_with_dkg {
     use std::features;
+    use std::string::utf8;
+    use aptos_std::debug;
     use aptos_framework::consensus_config;
     use aptos_framework::dkg;
     use aptos_framework::execution_config;
@@ -22,12 +24,17 @@ module aptos_framework::reconfiguration_with_dkg {
     /// Trigger a reconfiguration with DKG.
     /// Do nothing if one is already in progress.
     public(friend) fun try_start() {
+        debug::print(&utf8(b"0722 - try_start: begin"));
         if (!reconfiguration_state::is_in_progress()) {
+            debug::print(&utf8(b"0722 - try_start: mark start"));
             reconfiguration_state::on_reconfig_start();
             stake::finalize_next_validator_set();
+            debug::print(&utf8(b"0722 - try_start: work on dkg"));
             dkg::on_async_reconfig_start();
+            debug::print(&utf8(b"0722 - try_start: work on mpc"));
             mpc::on_async_reconfig_start();
         };
+        debug::print(&utf8(b"0722 - try_start: done"));
     }
 
     /// Clear incomplete DKG session, if it exists.
