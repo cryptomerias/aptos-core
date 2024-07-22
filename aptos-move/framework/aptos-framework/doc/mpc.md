@@ -24,8 +24,10 @@
 
 
 <pre><code><b>use</b> <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any">0x1::copyable_any</a>;
+<b>use</b> <a href="../../aptos-stdlib/doc/debug.md#0x1_debug">0x1::debug</a>;
 <b>use</b> <a href="event.md#0x1_event">0x1::event</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
+<b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string">0x1::string</a>;
 <b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
 </code></pre>
 
@@ -389,25 +391,30 @@ This resource exists under 0x1 iff MPC is enabled.
 
 <pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="mpc.md#0x1_mpc_ready_for_next_epoch">ready_for_next_epoch</a>(): bool <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
     <b>if</b> (!<b>exists</b>&lt;<a href="mpc.md#0x1_mpc_FeatureEnabledFlag">FeatureEnabledFlag</a>&gt;(@aptos_framework)) {
+        <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0722 - <a href="mpc.md#0x1_mpc">mpc</a> ready 0"));
         <b>return</b> <b>true</b>
     };
 
     <b>if</b> (!<b>exists</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework)) {
+        <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0722 - <a href="mpc.md#0x1_mpc">mpc</a> not ready 1"));
         <b>return</b> <b>false</b>
     };
 
     <b>let</b> state = <b>borrow_global</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework);
     <b>let</b> num_secrets = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&state.shared_secrets);
     <b>if</b> (num_secrets == 0) {
+        <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0722 - <a href="mpc.md#0x1_mpc">mpc</a> not ready 2"));
         <b>return</b> <b>false</b>
     };
 
     <b>let</b> secret_state = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(&state.shared_secrets, 0);
     <b>let</b> maybe_trx = &secret_state.transcript_for_next_epoch;
     <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_none">option::is_none</a>(maybe_trx)) {
+        <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0722 - <a href="mpc.md#0x1_mpc">mpc</a> not ready 3"));
         <b>return</b> <b>false</b>
     };
 
+    <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0722 - <a href="mpc.md#0x1_mpc">mpc</a> ready 4"));
     <b>true</b>
 }
 </code></pre>

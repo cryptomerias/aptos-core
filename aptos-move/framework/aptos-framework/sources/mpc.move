@@ -1,9 +1,11 @@
 module aptos_framework::mpc {
     use std::option;
     use std::option::Option;
+    use std::string::utf8;
     use std::vector;
     use aptos_std::copyable_any;
     use aptos_std::copyable_any::Any;
+    use aptos_std::debug;
     use aptos_framework::event::emit;
     use aptos_framework::system_addresses;
 
@@ -74,25 +76,30 @@ module aptos_framework::mpc {
 
     public(friend) fun ready_for_next_epoch(): bool acquires State {
         if (!exists<FeatureEnabledFlag>(@aptos_framework)) {
+            debug::print(&utf8(b"0722 - mpc ready 0"));
             return true
         };
 
         if (!exists<State>(@aptos_framework)) {
+            debug::print(&utf8(b"0722 - mpc not ready 1"));
             return false
         };
 
         let state = borrow_global<State>(@aptos_framework);
         let num_secrets = vector::length(&state.shared_secrets);
         if (num_secrets == 0) {
+            debug::print(&utf8(b"0722 - mpc not ready 2"));
             return false
         };
 
         let secret_state = vector::borrow(&state.shared_secrets, 0);
         let maybe_trx = &secret_state.transcript_for_next_epoch;
         if (option::is_none(maybe_trx)) {
+            debug::print(&utf8(b"0722 - mpc not ready 3"));
             return false
         };
 
+        debug::print(&utf8(b"0722 - mpc ready 4"));
         true
     }
 
