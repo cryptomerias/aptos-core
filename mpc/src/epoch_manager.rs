@@ -10,7 +10,7 @@ use aptos_bounded_executor::BoundedExecutor;
 use aptos_channels::aptos_channel;
 use aptos_channels::message_queues::QueueStyle;
 use aptos_config::config::ReliableBroadcastConfig;
-use aptos_event_notifications::{EventNotificationListener, ReconfigNotification, ReconfigNotificationListener};
+use aptos_event_notifications::{EventNotification, EventNotificationListener, ReconfigNotification, ReconfigNotificationListener};
 use aptos_network::application::interface::NetworkClient;
 use aptos_network::protocols::network::Event;
 use aptos_reliable_broadcast::ReliableBroadcast;
@@ -23,6 +23,7 @@ use crate::mpc_manager::MPCManager;
 use crate::network::{IncomingRpcRequest, NetworkReceivers, NetworkSender};
 use crate::types::MPCMessage;
 use anyhow::Result;
+use aptos_logger::error;
 use crate::network_interface::MPCNetworkClient;
 
 pub struct EpochManager<P: OnChainConfigProvider> {
@@ -72,10 +73,30 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         }
     }
 
+    fn on_mpc_event_notification(&mut self, notification: EventNotification) -> Result<()> {
+        if let Some(tx) = self.mpc_event_tx.as_ref() {
+            let EventNotification {
+                subscribed_events, ..
+            } = notification;
+            for event in subscribed_events {
+                if let Ok(mpc_event) = MPCEvent::try_from(&event) {
+                    let _ = tx.push((), mpc_event);
+                    return Ok(());
+                } else {
+                    error!("[MPC] on_mpc_event_notification: failed in converting a contract event to a mpc event!");
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub async fn start(mut self, mut network_receivers: NetworkReceivers) {
         self.await_reconfig_notification().await;
         loop {
             let handling_result = tokio::select! {
+                notification = self.mpc_events.select_next_some() => {
+                    self.on_mpc_event_notification(notification)
+                },
                 reconfig_notification = self.reconfig_events.select_next_some() => {
                     self.on_new_epoch(reconfig_notification).await
                 },
