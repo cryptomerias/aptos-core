@@ -1,7 +1,12 @@
 // Copyright (c) Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use move_core_types::ident_str;
+use move_core_types::identifier::IdentStr;
+use move_core_types::language_storage::TypeTag;
+use move_core_types::move_resource::MoveStructType;
 use crate::on_chain_config::OnChainConfig;
 use crate::move_any::Any as MoveAny;
 
@@ -34,7 +39,14 @@ impl OnChainConfig for MpcState {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum MPCEvent {
-    NewTask,
+pub struct MPCEvent {
     //mpc todo
 }
+
+impl MoveStructType for MPCEvent {
+    const MODULE_NAME: &'static IdentStr = ident_str!("mpc");
+    const STRUCT_NAME: &'static IdentStr = ident_str!("MPCEvent");
+}
+
+pub static MPC_EVENT_MOVE_TYPE_TAG: Lazy<TypeTag> =
+    Lazy::new(|| TypeTag::Struct(Box::new(MPCEvent::struct_tag())));

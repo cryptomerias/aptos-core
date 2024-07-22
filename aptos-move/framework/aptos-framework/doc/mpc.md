@@ -10,7 +10,7 @@
 -  [Struct `TaskRaiseBySecret`](#0x1_mpc_TaskRaiseBySecret)
 -  [Struct `TaskState`](#0x1_mpc_TaskState)
 -  [Resource `State`](#0x1_mpc_State)
--  [Struct `EpochSwitchStart`](#0x1_mpc_EpochSwitchStart)
+-  [Struct `MPCEvent`](#0x1_mpc_MPCEvent)
 -  [Struct `NewTaskEvent`](#0x1_mpc_NewTaskEvent)
 -  [Struct `TaskCompletedEvent`](#0x1_mpc_TaskCompletedEvent)
 -  [Resource `FeatureEnabledFlag`](#0x1_mpc_FeatureEnabledFlag)
@@ -192,14 +192,14 @@
 
 </details>
 
-<a id="0x1_mpc_EpochSwitchStart"></a>
+<a id="0x1_mpc_MPCEvent"></a>
 
-## Struct `EpochSwitchStart`
+## Struct `MPCEvent`
 
 
 
 <pre><code>#[<a href="event.md#0x1_event">event</a>]
-<b>struct</b> <a href="mpc.md#0x1_mpc_EpochSwitchStart">EpochSwitchStart</a>
+<b>struct</b> <a href="mpc.md#0x1_mpc_MPCEvent">MPCEvent</a> <b>has</b> drop, store
 </code></pre>
 
 
@@ -365,7 +365,7 @@ This resource exists under 0x1 iff MPC is enabled.
 
 <pre><code><b>public</b> <b>fun</b> <a href="mpc.md#0x1_mpc_on_async_reconfig_start">on_async_reconfig_start</a>() {
     <b>if</b> (<b>exists</b>&lt;<a href="mpc.md#0x1_mpc_FeatureEnabledFlag">FeatureEnabledFlag</a>&gt;(@aptos_framework)) {
-        //<a href="mpc.md#0x1_mpc">mpc</a> todo: emit an <a href="event.md#0x1_event">event</a> <b>to</b> trigger validator components.
+        emit(<a href="mpc.md#0x1_mpc_MPCEvent">MPCEvent</a> {})
     }
 }
 </code></pre>

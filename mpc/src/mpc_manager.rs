@@ -56,6 +56,9 @@ impl MPCManager {
         let mut close_rx = close_rx.into_stream();
         while !self.stopped {
             let handling_result = tokio::select! {
+                mpc_event = mpc_event_rx.select_next_some() => {
+                    self.process_mpc_event(mpc_event).await.map_err(|e|anyhow!("[MPC] process_mpc_event failed: {e}"))
+                },
                 close_req = close_rx.select_next_some() => {
                     self.process_close_cmd(close_req.ok())
                 },
@@ -76,6 +79,16 @@ impl MPCManager {
             my_addr = self.my_addr.to_hex().as_str(),
             "[MPC] MPCManager finished."
         );
+    }
+
+    async fn process_mpc_event(&mut self, event: MPCEvent) -> Result<()> {
+        info!(
+            epoch = self.epoch_state.epoch,
+            my_addr = self.my_addr,
+            "[MPC] Processing MPC event."
+        );
+        //mpc todo
+        Ok(())
     }
 
     fn process_close_cmd(&mut self, ack_tx: Option<oneshot::Sender<()>>) -> Result<()> {

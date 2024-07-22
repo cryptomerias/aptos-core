@@ -37,8 +37,8 @@ module aptos_framework::mpc {
     }
 
     #[event]
-    struct EpochSwitchStart {
-
+    struct MPCEvent has drop, store {
+        //mpc todo
     }
 
     #[event]
@@ -70,7 +70,7 @@ module aptos_framework::mpc {
 
     public fun on_async_reconfig_start() {
         if (exists<FeatureEnabledFlag>(@aptos_framework)) {
-            //mpc todo: emit an event to trigger validator components.
+            emit(MPCEvent {})
         }
     }
 
