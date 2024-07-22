@@ -5,6 +5,7 @@ use move_vm_types::loaded_data::runtime_types::{StructIdentifier, StructNameInde
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 use std::collections::BTreeMap;
 
+#[derive(Clone)]
 struct IndexMap<T: Clone + Ord> {
     forward_map: BTreeMap<T, usize>,
     backward_map: Vec<T>,
@@ -31,5 +32,11 @@ impl StructNameIndexMap {
         idx: StructNameIndex,
     ) -> MappedRwLockReadGuard<StructIdentifier> {
         RwLockReadGuard::map(self.0.read(), |index_map| &index_map.backward_map[idx.0])
+    }
+}
+
+impl Clone for StructNameIndexMap {
+    fn clone(&self) -> Self {
+        Self(RwLock::new(self.0.read().clone()))
     }
 }

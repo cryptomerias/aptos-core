@@ -35,7 +35,6 @@ use parking_lot::RwLock;
 use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
 use typed_arena::Arena;
 
-#[allow(dead_code)]
 pub(crate) struct LoaderV2<V: Verifier> {
     // Map to from struct names to indices, to save on unnecessary cloning and
     // reduce memory consumption.
@@ -290,6 +289,11 @@ impl<V: Verifier> LoaderV2<V> {
     }
 
     #[allow(dead_code)]
+    pub(crate) fn type_to_type_tag(&self, _ty: &Type) -> PartialVMResult<TypeTag> {
+        unimplemented!()
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn calculate_depth_of_struct(
         &self,
         _module_storage: &impl ModuleStorage,
@@ -298,7 +302,22 @@ impl<V: Verifier> LoaderV2<V> {
         unimplemented!()
     }
 
-    fn ty_builder(&self) -> &TypeBuilder {
+    pub(crate) fn vm_config(&self) -> &VMConfig {
+        &self.vm_config
+    }
+
+    pub(crate) fn ty_builder(&self) -> &TypeBuilder {
         &self.vm_config.ty_builder
+    }
+}
+
+impl<V: Verifier> Clone for LoaderV2<V> {
+    fn clone(&self) -> Self {
+        Self {
+            struct_name_index_map: self.struct_name_index_map.clone(),
+            vm_config: self.vm_config.clone(),
+            phantom_data: PhantomData,
+            depth_formula_cache: RwLock::new(self.depth_formula_cache.read().clone()),
+        }
     }
 }

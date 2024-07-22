@@ -5,7 +5,7 @@
 use crate::{
     config::VMConfig,
     data_cache::TransactionDataCache,
-    loader::{LoadedFunction, ModuleStorageAdapter},
+    loader::{LoadedFunction, Loader, ModuleStorageAdapter},
     module_traversal::TraversalContext,
     move_vm::MoveVM,
     native_extensions::NativeContextExtensions,
@@ -428,15 +428,17 @@ impl<'r, 'l> Session<'r, 'l> {
     }
 
     pub fn get_struct_type(&self, index: StructNameIndex) -> Option<Arc<StructType>> {
-        let name = self
-            .move_vm
-            .runtime
-            .loader()
-            .name_cache
-            .idx_to_identifier(index);
-        self.module_store
-            .get_struct_type_by_identifier(&name.name, &name.module)
-            .ok()
+        match self.move_vm.runtime.loader() {
+            Loader::V1(loader) => {
+                let name = loader.name_cache.idx_to_identifier(index);
+                self.module_store
+                    .get_struct_type_by_identifier(&name.name, &name.module)
+                    .ok()
+            },
+            Loader::V2(_) => {
+                unimplemented!()
+            },
+        }
     }
 
     pub fn check_dependencies_and_charge_gas<'a, I>(
