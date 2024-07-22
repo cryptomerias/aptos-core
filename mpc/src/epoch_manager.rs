@@ -91,15 +91,18 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     epoch = self.epoch_state.as_ref().unwrap().epoch,
                     "0722 - on_mpc_event_notification: notification contains 1+ events"
                 );
-                if let Ok(mpc_event) = MPCEvent::try_from(&event) {
-                    debug!(
-                        epoch = self.epoch_state.as_ref().unwrap().epoch,
-                        "0722 - on_mpc_event_notification: cast succeeded"
-                    );
-                    let _ = tx.push((), mpc_event);
-                    return Ok(());
-                } else {
-                    error!("[MPC] on_mpc_event_notification: failed in converting a contract event to a mpc event!");
+                match MPCEvent::try_from(&event) {
+                    Ok(mpc_event) => {
+                        debug!(
+                            epoch = self.epoch_state.as_ref().unwrap().epoch,
+                            "0722 - on_mpc_event_notification: cast succeeded"
+                        );
+                        let _ = tx.push((), mpc_event);
+                        return Ok(());
+                    },
+                    Err(e) => {
+                        error!("[MPC] on_mpc_event_notification: failed with event conversion error: {e}");
+                    }
                 }
             }
         }
