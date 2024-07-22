@@ -40,7 +40,7 @@ impl OnChainConfig for MpcState {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MPCEvent {
-    //mpc todo
+    field_1: u64,
 }
 
 impl MoveStructType for MPCEvent {

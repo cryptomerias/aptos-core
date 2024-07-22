@@ -38,7 +38,7 @@ module aptos_framework::mpc {
 
     #[event]
     struct MPCEvent has drop, store {
-        //mpc todo
+        field_1: u64,
     }
 
     #[event]
@@ -71,7 +71,7 @@ module aptos_framework::mpc {
     public fun on_async_reconfig_start() {
         if (exists<FeatureEnabledFlag>(@aptos_framework)) {
             debug::print(&utf8(b"0722 - emitting mpc event"));
-            emit(MPCEvent {})
+            emit(MPCEvent { field_1: 99 })
         }
     }
 
