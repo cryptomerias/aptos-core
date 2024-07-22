@@ -23,7 +23,7 @@ use crate::mpc_manager::MPCManager;
 use crate::network::{IncomingRpcRequest, NetworkReceivers, NetworkSender};
 use crate::types::MPCMessage;
 use anyhow::Result;
-use aptos_logger::error;
+use aptos_logger::{debug, error};
 use crate::network_interface::MPCNetworkClient;
 
 pub struct EpochManager<P: OnChainConfigProvider> {
@@ -74,12 +74,28 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     }
 
     fn on_mpc_event_notification(&mut self, notification: EventNotification) -> Result<()> {
+        debug!(
+            epoch = self.epoch_state.as_ref().unwrap().epoch,
+            "0722 - on_mpc_event_notification: start"
+        );
         if let Some(tx) = self.mpc_event_tx.as_ref() {
+            debug!(
+                epoch = self.epoch_state.as_ref().unwrap().epoch,
+                "0722 - on_mpc_event_notification: has tx to MPCManager"
+            );
             let EventNotification {
                 subscribed_events, ..
             } = notification;
             for event in subscribed_events {
+                debug!(
+                    epoch = self.epoch_state.as_ref().unwrap().epoch,
+                    "0722 - on_mpc_event_notification: notification contains 1+ events"
+                );
                 if let Ok(mpc_event) = MPCEvent::try_from(&event) {
+                    debug!(
+                        epoch = self.epoch_state.as_ref().unwrap().epoch,
+                        "0722 - on_mpc_event_notification: cast succeeded"
+                    );
                     let _ = tx.push((), mpc_event);
                     return Ok(());
                 } else {
