@@ -62,6 +62,7 @@ module aptos_framework::mpc {
                 tasks: vector[],
             };
             move_to(framework, state);
+            move_to(framework, FeatureEnabledFlag {}); //mpc todo: this needs to be pulled out as part of mpc_config, just like randomness_config.
         }
     }
 

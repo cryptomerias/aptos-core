@@ -337,6 +337,7 @@ This resource exists under 0x1 iff MPC is enabled.
             tasks: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>[],
         };
         <b>move_to</b>(framework, state);
+        <b>move_to</b>(framework, <a href="mpc.md#0x1_mpc_FeatureEnabledFlag">FeatureEnabledFlag</a> {}); //<a href="mpc.md#0x1_mpc">mpc</a> todo: this needs <b>to</b> be pulled out <b>as</b> part of mpc_config, just like <a href="randomness_config.md#0x1_randomness_config">randomness_config</a>.
     }
 }
 </code></pre>
