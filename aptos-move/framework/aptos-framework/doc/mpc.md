@@ -439,8 +439,12 @@ This resource exists under 0x1 iff MPC is enabled.
 <summary>Implementation</summary>
 
 
-<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="mpc.md#0x1_mpc_on_new_epoch">on_new_epoch</a>(_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) {
+<pre><code><b>public</b>(<b>friend</b>) <b>fun</b> <a href="mpc.md#0x1_mpc_on_new_epoch">on_new_epoch</a>(_framework: &<a href="../../aptos-stdlib/../move-stdlib/doc/signer.md#0x1_signer">signer</a>) <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
     //<a href="mpc.md#0x1_mpc">mpc</a> todo: should clean up <a href="../../aptos-stdlib/doc/any.md#0x1_any">any</a> in-progress session states.
+    <b>let</b> state = <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework);
+    <b>let</b> main_secret_state = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow_mut">vector::borrow_mut</a>(&<b>mut</b> state.shared_secrets, 0);
+    <b>let</b> trx = <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_extract">option::extract</a>(&<b>mut</b> main_secret_state.transcript_for_next_epoch);
+    main_secret_state.transcript_for_cur_epoch = <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(trx);
 }
 </code></pre>
 

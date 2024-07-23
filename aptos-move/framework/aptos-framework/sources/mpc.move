@@ -104,8 +104,12 @@ module aptos_framework::mpc {
         true
     }
 
-    public(friend) fun on_new_epoch(_framework: &signer) {
+    public(friend) fun on_new_epoch(_framework: &signer) acquires State {
         //mpc todo: should clean up any in-progress session states.
+        let state = borrow_global_mut<State>(@aptos_framework);
+        let main_secret_state = vector::borrow_mut(&mut state.shared_secrets, 0);
+        let trx = option::extract(&mut main_secret_state.transcript_for_next_epoch);
+        main_secret_state.transcript_for_cur_epoch = option::some(trx);
     }
 
 
