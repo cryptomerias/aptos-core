@@ -19,7 +19,7 @@
 -  [Function `ready_for_next_epoch`](#0x1_mpc_ready_for_next_epoch)
 -  [Function `on_new_epoch`](#0x1_mpc_on_new_epoch)
 -  [Function `raise_by_secret`](#0x1_mpc_raise_by_secret)
--  [Function `fulfill_task`](#0x1_mpc_fulfill_task)
+-  [Function `update_state`](#0x1_mpc_update_state)
 -  [Function `get_result`](#0x1_mpc_get_result)
 
 
@@ -493,14 +493,14 @@ This resource exists under 0x1 iff MPC is enabled.
 
 </details>
 
-<a id="0x1_mpc_fulfill_task"></a>
+<a id="0x1_mpc_update_state"></a>
 
-## Function `fulfill_task`
+## Function `update_state`
 
 When a MPC task is done, this is invoked by validator transactions.
 
 
-<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_fulfill_task">fulfill_task</a>(task_idx: u64, result: <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;)
+<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_update_state">update_state</a>()
 </code></pre>
 
 
@@ -509,13 +509,21 @@ When a MPC task is done, this is invoked by validator transactions.
 <summary>Implementation</summary>
 
 
-<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_fulfill_task">fulfill_task</a>(task_idx: u64, result: Option&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;) <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
-    <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow_mut">vector::borrow_mut</a>(&<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework).tasks, task_idx).result = result;
-    <b>let</b> <a href="event.md#0x1_event">event</a> = <a href="mpc.md#0x1_mpc_TaskCompletedEvent">TaskCompletedEvent</a> {
-        task_idx,
-        result,
+<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_update_state">update_state</a>() <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
+    <b>let</b> state = <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework);
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&state.shared_secrets) == 0) {
+        <b>let</b> secret = <a href="mpc.md#0x1_mpc_SharedSecretState">SharedSecretState</a> {
+            transcript_for_cur_epoch: <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>(),
+            transcript_for_next_epoch: <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(b"some_secret_transcript"),
+        };
+
+        <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> state.shared_secrets, secret);
+    } <b>else</b> {
+        <b>let</b> secret_state = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow_mut">vector::borrow_mut</a>(&<b>mut</b> state.shared_secrets, 0);
+        <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_none">option::is_none</a>(&secret_state.transcript_for_next_epoch), 1);
+        secret_state.transcript_for_next_epoch = <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(b"some_secret_transcript");
     };
-    emit(<a href="event.md#0x1_event">event</a>);
+
 }
 </code></pre>
 

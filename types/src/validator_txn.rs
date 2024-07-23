@@ -14,6 +14,7 @@ use std::fmt::Debug;
 pub enum ValidatorTransaction {
     DKGResult(DKGTranscript),
     ObservedJWKUpdate(jwks::QuorumCertifiedUpdate),
+    MPCStateUpdate,
 }
 
 impl ValidatorTransaction {
@@ -38,6 +39,7 @@ impl ValidatorTransaction {
             ValidatorTransaction::ObservedJWKUpdate(update) => {
                 Topic::JWK_CONSENSUS(update.update.issuer.clone())
             },
+            ValidatorTransaction::MPCStateUpdate => Topic::MPC,
         }
     }
 
@@ -47,6 +49,7 @@ impl ValidatorTransaction {
             ValidatorTransaction::ObservedJWKUpdate(_) => {
                 "validator_transaction__observed_jwk_update"
             },
+            ValidatorTransaction::MPCStateUpdate => "validator_transaction__mpc_state_update",
         }
     }
 }
@@ -56,4 +59,5 @@ impl ValidatorTransaction {
 pub enum Topic {
     DKG,
     JWK_CONSENSUS(jwks::Issuer),
+    MPC,
 }

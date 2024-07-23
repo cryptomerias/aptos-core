@@ -49,6 +49,15 @@ pub static DKG_MODULE: Lazy<ModuleId> = Lazy::new(|| {
 
 pub const FINISH: &IdentStr = ident_str!("finish");
 
+pub static MPC_MODULE: Lazy<ModuleId> = Lazy::new(|| {
+    ModuleId::new(
+        account_config::CORE_CODE_ADDRESS,
+        ident_str!("mpc").to_owned(),
+    )
+});
+
+pub const UPDATE_STATE: &IdentStr = ident_str!("update_state");
+
 pub static JWKS_MODULE: Lazy<ModuleId> = Lazy::new(|| {
     ModuleId::new(
         account_config::CORE_CODE_ADDRESS,

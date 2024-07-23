@@ -135,13 +135,21 @@ module aptos_framework::mpc {
     }
 
     /// When a MPC task is done, this is invoked by validator transactions.
-    fun fulfill_task(task_idx: u64, result: Option<vector<u8>>) acquires State {
-        vector::borrow_mut(&mut borrow_global_mut<State>(@aptos_framework).tasks, task_idx).result = result;
-        let event = TaskCompletedEvent {
-            task_idx,
-            result,
+    fun update_state() acquires State {
+        let state = borrow_global_mut<State>(@aptos_framework);
+        if (vector::length(&state.shared_secrets) == 0) {
+            let secret = SharedSecretState {
+                transcript_for_cur_epoch: option::none(),
+                transcript_for_next_epoch: option::some(b"some_secret_transcript"),
+            };
+
+            vector::push_back(&mut state.shared_secrets, secret);
+        } else {
+            let secret_state = vector::borrow_mut(&mut state.shared_secrets, 0);
+            assert!(option::is_none(&secret_state.transcript_for_next_epoch), 1);
+            secret_state.transcript_for_next_epoch = option::some(b"some_secret_transcript");
         };
-        emit(event);
+
     }
 
     /// Used by user contract to get the result.

@@ -589,6 +589,7 @@ pub struct BlockMetadataTransaction {
 pub enum ValidatorTransaction {
     ObservedJwkUpdate(JWKUpdateTransaction),
     DkgResult(DKGResultTransaction),
+    MPCStateUpdate(MPCStateUpdateTransaction),
 }
 
 impl ValidatorTransaction {
@@ -598,6 +599,7 @@ impl ValidatorTransaction {
                 "validator_transaction__observed_jwk_update"
             },
             ValidatorTransaction::DkgResult(_) => "validator_transaction__dkg_result",
+            ValidatorTransaction::MPCStateUpdate(_) => "validator_transaction__mpc_state_update",
         }
     }
 
@@ -605,6 +607,7 @@ impl ValidatorTransaction {
         match self {
             ValidatorTransaction::ObservedJwkUpdate(t) => &t.info,
             ValidatorTransaction::DkgResult(t) => &t.info,
+            ValidatorTransaction::MPCStateUpdate(t) => &t.info,
         }
     }
 
@@ -612,6 +615,7 @@ impl ValidatorTransaction {
         match self {
             ValidatorTransaction::ObservedJwkUpdate(t) => &mut t.info,
             ValidatorTransaction::DkgResult(t) => &mut t.info,
+            ValidatorTransaction::MPCStateUpdate(t) => &mut t.info,
         }
     }
 
@@ -619,6 +623,7 @@ impl ValidatorTransaction {
         match self {
             ValidatorTransaction::ObservedJwkUpdate(t) => t.timestamp,
             ValidatorTransaction::DkgResult(t) => t.timestamp,
+            ValidatorTransaction::MPCStateUpdate(t) => t.timestamp,
         }
     }
 
@@ -626,6 +631,7 @@ impl ValidatorTransaction {
         match self {
             ValidatorTransaction::ObservedJwkUpdate(t) => &t.events,
             ValidatorTransaction::DkgResult(t) => &t.events,
+            ValidatorTransaction::MPCStateUpdate(t) => &t.events,
         }
     }
 }
@@ -662,6 +668,11 @@ impl
                 events,
                 timestamp: U64::from(timestamp),
                 quorum_certified_update: quorum_certified_update.into(),
+            }),
+            aptos_types::validator_txn::ValidatorTransaction::MPCStateUpdate => Self::MPCStateUpdate(MPCStateUpdateTransaction {
+                info,
+                events,
+                timestamp: U64::from(timestamp),
             }),
         }
     }
@@ -737,6 +748,15 @@ impl From<ProviderJWKs> for ExportedProviderJWKs {
             }).collect(),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Object)]
+pub struct MPCStateUpdateTransaction {
+    #[serde(flatten)]
+    #[oai(flatten)]
+    pub info: TransactionInfo,
+    pub events: Vec<Event>,
+    pub timestamp: U64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Object)]

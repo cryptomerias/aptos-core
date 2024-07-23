@@ -25,9 +25,13 @@ impl AptosVM {
             ValidatorTransaction::ObservedJWKUpdate(jwk_update) => {
                 self.process_jwk_update(resolver, log_context, session_id, jwk_update)
             },
+            ValidatorTransaction::MPCStateUpdate => {
+                self.process_mpc_state_update(resolver, log_context, session_id)
+            }
         }
     }
 }
 
 mod dkg;
 mod jwk;
+mod mpc;
