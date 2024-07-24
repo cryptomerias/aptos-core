@@ -55,7 +55,7 @@ use crate::storage::{
     dummy::DummyVerifier,
     loader::LoaderV2,
     modules::{StructVariantInfo, VariantFieldInfo},
-    script_storage::{ScriptHash as ScriptHashV2, ScriptStorage},
+    script_storage::{ScriptStorage},
 };
 pub use function::LoadedFunction;
 pub(crate) use function::{Function, FunctionHandle, FunctionInstantiation, Scope};
@@ -567,12 +567,7 @@ impl Loader {
                     .get(hash)
                     .expect("Script hash on Function must exist"),
             ),
-            Self::V2(_) => {
-                // To fetch a script, we can directly get it from the script storage.
-                // TODO: Unify script hashes...
-                let hash = ScriptHashV2(*hash);
-                script_storage.fetch_existing_verified_script(&hash)
-            },
+            Self::V2(_) => script_storage.fetch_existing_verified_script(hash),
         }
     }
 }
@@ -736,7 +731,7 @@ impl LoaderV1 {
     fn deserialize_and_verify_script(
         &self,
         script: &[u8],
-        hash_value: [u8; 32],
+        hash_value: ScriptHash,
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
     ) -> VMResult<Arc<CompiledScript>> {

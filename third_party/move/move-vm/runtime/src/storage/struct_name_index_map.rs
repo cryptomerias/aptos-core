@@ -11,6 +11,8 @@ struct IndexMap<T: Clone + Ord> {
     backward_map: Vec<T>,
 }
 
+/// A data structure to cache struct identifiers (address, module name, struct name) and
+/// use indices instead, to save on the memory consumption and avoid unnecessary cloning.
 pub(crate) struct StructNameIndexMap(RwLock<IndexMap<StructIdentifier>>);
 
 impl StructNameIndexMap {

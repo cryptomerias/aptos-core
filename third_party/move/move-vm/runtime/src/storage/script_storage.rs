@@ -6,30 +6,38 @@ use move_binary_format::{errors::PartialVMResult, file_format::CompiledScript};
 use sha3::{Digest, Sha3_256};
 use std::sync::Arc;
 
-// TODO(George) remove pub here for inner type.
-pub struct ScriptHash(pub [u8; 32]);
-
-impl From<&[u8]> for ScriptHash {
-    fn from(serialized_script: &[u8]) -> Self {
-        let mut sha3_256 = Sha3_256::new();
-        sha3_256.update(serialized_script);
-        let hash_value: [u8; 32] = sha3_256.finalize().into();
-        Self(hash_value)
-    }
+pub fn script_hash(serialized_script: &[u8]) -> [u8; 32] {
+    let mut sha3_256 = Sha3_256::new();
+    sha3_256.update(serialized_script);
+    sha3_256.finalize().into()
 }
 
+/// Represents storage which caches scripts, executed so far. The clients can
+/// implement this trait to ensure that even script dependency is upgraded, the
+/// correct script is still returned. Scripts are cached based on their hash.
 pub trait ScriptStorage {
+    /// Returns a deserialized script, either by directly deserializing it from the
+    /// provided bytes, or fetching it from the storage (if it has been cached). Note
+    /// that there are no guarantees that the returned script is verified. An error
+    /// is returned if the deserialization fails.
     fn fetch_deserialized_script(
         &self,
         serialized_script: &[u8],
     ) -> PartialVMResult<Arc<CompiledScript>>;
 
+    /// Returns a verified script, if it is cached. If not, the script is created using
+    /// the passed callback function. It is the responsibility of the client to ensure
+    /// that the callback verifies the script. An error is returned if script fails to
+    /// deserialize or verify.
     fn fetch_or_create_verified_script(
         &self,
         serialized_script: &[u8],
         f: &dyn Fn(Arc<CompiledScript>) -> PartialVMResult<Script>,
     ) -> PartialVMResult<Arc<Script>>;
 
-    // Panics if the script has not been created and cached before.
-    fn fetch_existing_verified_script(&self, script_hash: &ScriptHash) -> Arc<Script>;
+    /// Returns verified script from module storage. Panics if the script has not been
+    /// created and cached before.
+    // TODO: The primary use of this API is for the VM to fetch the script context based
+    //       on function's scope, but at that point we only have access to scripts hash...
+    fn fetch_existing_verified_script(&self, script_hash: &[u8; 32]) -> Arc<Script>;
 }

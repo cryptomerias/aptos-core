@@ -42,9 +42,10 @@ pub struct Script {
 
 impl Script {
     pub(crate) fn new_v2(
-        _module_storage: &dyn ModuleStorage,
         _struct_name_index_map: &StructNameIndexMap,
+        _module_storage: &dyn ModuleStorage,
         _compiled_script: Arc<CompiledScript>,
+        _script_hash: [u8; 32],
         // Note: possibly we need to take script's hash for scope.
     ) -> PartialVMResult<Self> {
         unimplemented!()

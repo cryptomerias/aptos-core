@@ -6,9 +6,9 @@ use crate::{
     loader::{Function, Module},
     module_traversal::TraversalContext,
     storage::{
-        builders::{ModuleBuilder, ScriptBuilder},
+        builders::{build_module, build_script},
         module_storage::ModuleStorage,
-        script_storage::ScriptStorage,
+        script_storage::{script_hash, ScriptStorage},
         struct_name_index_map::StructNameIndexMap,
         verifier::Verifier,
     },
@@ -32,17 +32,17 @@ use move_vm_types::{
     loaded_data::runtime_types::{DepthFormula, StructNameIndex, StructType, Type, TypeBuilder},
 };
 use parking_lot::RwLock;
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 use typed_arena::Arena;
 
-pub(crate) struct LoaderV2<V: Verifier> {
+pub(crate) struct LoaderV2<V: Clone + Verifier> {
     // Map to from struct names to indices, to save on unnecessary cloning and
     // reduce memory consumption.
     pub(crate) struct_name_index_map: StructNameIndexMap,
     // Configuration of the VM, which own this loader. Contains information about
     // enabled checks, etc.
     vm_config: VMConfig,
-    phantom_data: PhantomData<V>,
+    verifier: V,
 
     // Local caches:
     //   These caches are owned by this loader and are not affected by module
@@ -58,7 +58,7 @@ pub(crate) struct LoaderV2<V: Verifier> {
     // TODO(George): Add remaining type caches here for layouts and tags.
 }
 
-impl<V: Verifier> LoaderV2<V> {
+impl<V: Clone + Verifier> LoaderV2<V> {
     pub(crate) fn check_script_dependencies_and_check_gas(
         &self,
         module_storage: &impl ModuleStorage,
@@ -152,9 +152,18 @@ impl<V: Verifier> LoaderV2<V> {
         serialized_script: &[u8],
         ty_args: &[TypeTag],
     ) -> VMResult<LoadedFunction> {
+        let script_hash = script_hash(serialized_script);
         let main = script_storage
             .fetch_or_create_verified_script(serialized_script, &|cs| {
-                ScriptBuilder::<V>::build(module_storage, &self.struct_name_index_map, cs)
+                build_script(
+                    &self.struct_name_index_map,
+                    &self.verifier,
+                    module_storage,
+                    cs,
+                    // TODO(George): We re-calculate the script hash because function
+                    //   is not aware of the context in which it executes. Revisit.c
+                    script_hash,
+                )
             })
             .map_err(|e| e.finish(Location::Script))?
             .entry_point();
@@ -186,7 +195,12 @@ impl<V: Verifier> LoaderV2<V> {
     ) -> VMResult<Arc<Module>> {
         module_storage
             .fetch_or_create_verified_module(address, module_name, &|cm| {
-                ModuleBuilder::<V>::build(module_storage, &self.struct_name_index_map, cm)
+                build_module(
+                    &self.struct_name_index_map,
+                    &self.verifier,
+                    module_storage,
+                    cm,
+                )
             })
             .map_err(|e| {
                 e.finish(Location::Module(ModuleId::new(
@@ -317,12 +331,12 @@ impl<V: Verifier> LoaderV2<V> {
     }
 }
 
-impl<V: Verifier> Clone for LoaderV2<V> {
+impl<V: Clone + Verifier> Clone for LoaderV2<V> {
     fn clone(&self) -> Self {
         Self {
             struct_name_index_map: self.struct_name_index_map.clone(),
             vm_config: self.vm_config.clone(),
-            phantom_data: PhantomData,
+            verifier: self.verifier.clone(),
             depth_formula_cache: RwLock::new(self.depth_formula_cache.read().clone()),
         }
     }
