@@ -4,6 +4,7 @@ module aptos_framework::next_validator_set {
     use aptos_framework::validator_consensus_info::ValidatorConsensusInfo;
     friend aptos_framework::stake;
     friend aptos_framework::reconfiguration;
+    friend aptos_framework::mpc;
 
     struct NextValidatorSet has key {
         next_validator_set: Option<vector<ValidatorConsensusInfo>>,
@@ -21,5 +22,10 @@ module aptos_framework::next_validator_set {
 
     public(friend) fun clear() acquires NextValidatorSet {
         borrow_global_mut<NextValidatorSet>(@aptos_framework).next_validator_set = option::none();
+    }
+
+    public(friend) fun load(): vector<ValidatorConsensusInfo> acquires NextValidatorSet {
+        let maybe_set = borrow_global<NextValidatorSet>(@aptos_framework).next_validator_set;
+        option::extract(&mut maybe_set)
     }
 }

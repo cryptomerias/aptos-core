@@ -882,7 +882,10 @@ fn convert_validator_transaction(
                     )
                 )
             },
-            ApiValidatorTransactionEnum::MPCStateUpdate(mpc_txn) => {
+            ApiValidatorTransactionEnum::MPCReconfigWorkDone(txn) => {
+                todo!()
+            },
+            ApiValidatorTransactionEnum::MPCUserRequestDone(txn) => {
                 todo!()
             },
             ApiValidatorTransactionEnum::ObservedJwkUpdate(observed_jwk_update) => {

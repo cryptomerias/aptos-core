@@ -22,7 +22,7 @@ use once_cell::sync::Lazy;
 use proptest_derive::Arbitrary;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
-use crate::mpc::MPCEvent;
+use crate::mpc::MPCEventMoveStruct;
 
 pub static FEE_STATEMENT_EVENT_TYPE: Lazy<TypeTag> = Lazy::new(|| {
     TypeTag::Struct(Box::new(StructTag {
@@ -318,7 +318,7 @@ impl TryFrom<&ContractEvent> for DKGStartEvent {
     }
 }
 
-impl TryFrom<&ContractEvent> for MPCEvent {
+impl TryFrom<&ContractEvent> for MPCEventMoveStruct {
     type Error = Error;
 
     fn try_from(event: &ContractEvent) -> Result<Self> {

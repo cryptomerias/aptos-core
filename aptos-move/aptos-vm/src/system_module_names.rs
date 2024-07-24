@@ -56,7 +56,8 @@ pub static MPC_MODULE: Lazy<ModuleId> = Lazy::new(|| {
     )
 });
 
-pub const UPDATE_STATE: &IdentStr = ident_str!("update_state");
+pub const PUBLISH_USER_REQUEST_RESULT: &IdentStr = ident_str!("publish_task_result");
+pub const PUBLISH_RECONFIG_WORK_RESULT: &IdentStr = ident_str!("publish_reconfig_work_result");
 
 pub static JWKS_MODULE: Lazy<ModuleId> = Lazy::new(|| {
     ModuleId::new(

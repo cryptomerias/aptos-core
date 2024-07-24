@@ -7,50 +7,49 @@ module aptos_framework::mpc {
     use aptos_std::copyable_any::Any;
     use aptos_std::debug;
     use aptos_framework::event::emit;
+    use aptos_framework::next_validator_set;
+    use aptos_framework::reconfiguration;
     use aptos_framework::system_addresses;
+    use aptos_framework::validator_consensus_info::ValidatorConsensusInfo;
 
     friend aptos_framework::reconfiguration_with_dkg;
 
-    struct SharedSecretState has store {
+    struct SharedSecretState has copy, drop, store {
         transcript_for_cur_epoch: Option<vector<u8>>,
         transcript_for_next_epoch: Option<vector<u8>>,
     }
 
     struct TaskSpec has copy, drop, store {
-        variant: Any,
-    }
-
-    struct TaskRaiseBySecret has copy, drop, store {
         group_element: vector<u8>,
         secret_idx: u64,
     }
 
-    struct TaskState has store {
+    struct TaskState has copy, drop, store {
         task: TaskSpec,
         result: Option<vector<u8>>,
     }
 
-    struct State has key {
+    struct State has copy, drop, key, store {
+        /// Currently only has 1 secret: the main secret.
         shared_secrets: vector<SharedSecretState>,
-        /// tasks[0] should always be `raise_by_secret(GENERATOR)`
+        /// The user request queue.
+        /// mpc todo: scale with Table/BigVector.
         tasks: vector<TaskState>,
     }
 
     #[event]
     struct MPCEvent has drop, store {
-        field_1: u64,
+        variant: Any,
     }
 
-    #[event]
-    struct NewTaskEvent has drop, store {
-        task_idx: u64,
-        task_spec: TaskSpec,
+    struct MPCEventReconfigStart has copy, drop, store {
+        epoch: u64,
+        next_validator_set: vector<ValidatorConsensusInfo>,
     }
 
-    #[event]
-    struct TaskCompletedEvent has drop, store {
-        task_idx: u64,
-        result: Option<vector<u8>>,
+    struct MPCEventStateUpdated has copy, drop, store {
+        epoch: u64,
+        new_state: State,
     }
 
     /// This resource exists under 0x1 iff MPC is enabled.
@@ -71,7 +70,11 @@ module aptos_framework::mpc {
     public fun on_async_reconfig_start() {
         if (exists<FeatureEnabledFlag>(@aptos_framework)) {
             debug::print(&utf8(b"0722 - emitting mpc event"));
-            emit(MPCEvent { field_1: 99 })
+            let event = MPCEventReconfigStart {
+                epoch: reconfiguration::current_epoch(),
+                next_validator_set: next_validator_set::load(),
+            };
+            emit(MPCEvent { variant: copyable_any::pack(event)});
         }
     }
 
@@ -114,50 +117,54 @@ module aptos_framework::mpc {
 
 
     public fun raise_by_secret(group_element: vector<u8>, secret_idx: u64): u64 acquires State {
+        //mpc todo: validate group_element
         let task_spec = TaskSpec {
-            variant: copyable_any::pack(TaskRaiseBySecret {
-                group_element,
-                secret_idx
-            }),
+            group_element,
+            secret_idx
         };
 
         let task_state = TaskState {
             task: task_spec,
             result: option::none(),
         };
-        let task_list = &mut borrow_global_mut<State>(@aptos_framework).tasks;
-        let task_idx = vector::length(task_list);
-        vector::push_back(task_list, task_state);
+        let state = borrow_global_mut<State>(@aptos_framework);
+        let task_idx = vector::length(&state.tasks);
+        vector::push_back(&mut state.tasks, task_state);
 
-        let event = NewTaskEvent {
-            task_idx,
-            task_spec
+        let event = MPCEventStateUpdated {
+            epoch: reconfiguration::current_epoch(),
+            new_state: *state,
         };
-        emit(event);
+        emit(MPCEvent { variant: copyable_any::pack(event)});
 
         task_idx
     }
 
-    /// When a MPC task is done, this is invoked by validator transactions.
-    fun update_state() acquires State {
-        let state = borrow_global_mut<State>(@aptos_framework);
-        if (vector::length(&state.shared_secrets) == 0) {
-            let secret = SharedSecretState {
-                transcript_for_cur_epoch: option::none(),
-                transcript_for_next_epoch: option::some(b"some_secret_transcript"),
-            };
-
-            vector::push_back(&mut state.shared_secrets, secret);
-        } else {
-            let secret_state = vector::borrow_mut(&mut state.shared_secrets, 0);
-            assert!(option::is_none(&secret_state.transcript_for_next_epoch), 1);
-            secret_state.transcript_for_next_epoch = option::some(b"some_secret_transcript");
-        };
-
-    }
-
-    /// Used by user contract to get the result.
+    /// Used by user contracts to get the result.
     public fun get_result(task_idx: u64): Option<vector<u8>> acquires State {
         vector::borrow(&mut borrow_global_mut<State>(@aptos_framework).tasks, task_idx).result
+    }
+
+    /// When a MPC task is done, this is invoked by validator transactions.
+    fun publish_reconfig_work_result(trx: vector<u8>) acquires State {
+        debug::print(&utf8(b"0720 - publish_reconfig_work_result: begin"));
+        let state = borrow_global_mut<State>(@aptos_framework);
+        let secret_state = vector::borrow_mut(&mut state.shared_secrets, 0);
+        if (option::is_none(&secret_state.transcript_for_next_epoch)) {
+            debug::print(&utf8(b"0720 - publish_reconfig_work_result: apply"));
+            secret_state.transcript_for_next_epoch = option::some(trx);
+        };
+        debug::print(&utf8(b"0720 - publish_reconfig_work_result: end"));
+    }
+
+    fun publish_task_result(idx: u64, result: vector<u8>) acquires State {
+        debug::print(&utf8(b"0720 - publish_task_result: begin"));
+        let state = borrow_global_mut<State>(@aptos_framework);
+        let task_state = vector::borrow_mut(&mut state.tasks, idx);
+        if (option::is_none(&task_state.result)) {
+            debug::print(&utf8(b"0720 - publish_task_result: apply"));
+            task_state.result = option::some(result);
+        };
+        debug::print(&utf8(b"0720 - publish_task_result: end"));
     }
 }

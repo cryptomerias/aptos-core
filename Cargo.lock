@@ -2787,6 +2787,7 @@ dependencies = [
  "aptos-validator-transaction-pool",
  "async-trait",
  "bcs 0.1.4",
+ "blstrs",
  "bytes",
  "fail",
  "futures",

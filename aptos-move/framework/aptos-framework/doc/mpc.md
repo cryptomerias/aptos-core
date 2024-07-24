@@ -7,28 +7,31 @@
 
 -  [Struct `SharedSecretState`](#0x1_mpc_SharedSecretState)
 -  [Struct `TaskSpec`](#0x1_mpc_TaskSpec)
--  [Struct `TaskRaiseBySecret`](#0x1_mpc_TaskRaiseBySecret)
 -  [Struct `TaskState`](#0x1_mpc_TaskState)
 -  [Resource `State`](#0x1_mpc_State)
 -  [Struct `MPCEvent`](#0x1_mpc_MPCEvent)
--  [Struct `NewTaskEvent`](#0x1_mpc_NewTaskEvent)
--  [Struct `TaskCompletedEvent`](#0x1_mpc_TaskCompletedEvent)
+-  [Struct `MPCEventReconfigStart`](#0x1_mpc_MPCEventReconfigStart)
+-  [Struct `MPCEventStateUpdated`](#0x1_mpc_MPCEventStateUpdated)
 -  [Resource `FeatureEnabledFlag`](#0x1_mpc_FeatureEnabledFlag)
 -  [Function `initialize`](#0x1_mpc_initialize)
 -  [Function `on_async_reconfig_start`](#0x1_mpc_on_async_reconfig_start)
 -  [Function `ready_for_next_epoch`](#0x1_mpc_ready_for_next_epoch)
 -  [Function `on_new_epoch`](#0x1_mpc_on_new_epoch)
 -  [Function `raise_by_secret`](#0x1_mpc_raise_by_secret)
--  [Function `update_state`](#0x1_mpc_update_state)
 -  [Function `get_result`](#0x1_mpc_get_result)
+-  [Function `publish_reconfig_work_result`](#0x1_mpc_publish_reconfig_work_result)
+-  [Function `publish_task_result`](#0x1_mpc_publish_task_result)
 
 
 <pre><code><b>use</b> <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any">0x1::copyable_any</a>;
 <b>use</b> <a href="../../aptos-stdlib/doc/debug.md#0x1_debug">0x1::debug</a>;
 <b>use</b> <a href="event.md#0x1_event">0x1::event</a>;
+<b>use</b> <a href="next_validator_set.md#0x1_next_validator_set">0x1::next_validator_set</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option">0x1::option</a>;
+<b>use</b> <a href="reconfiguration.md#0x1_reconfiguration">0x1::reconfiguration</a>;
 <b>use</b> <a href="../../aptos-stdlib/../move-stdlib/doc/string.md#0x1_string">0x1::string</a>;
 <b>use</b> <a href="system_addresses.md#0x1_system_addresses">0x1::system_addresses</a>;
+<b>use</b> <a href="validator_consensus_info.md#0x1_validator_consensus_info">0x1::validator_consensus_info</a>;
 </code></pre>
 
 
@@ -39,7 +42,7 @@
 
 
 
-<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_SharedSecretState">SharedSecretState</a> <b>has</b> store
+<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_SharedSecretState">SharedSecretState</a> <b>has</b> <b>copy</b>, drop, store
 </code></pre>
 
 
@@ -83,33 +86,6 @@
 
 <dl>
 <dt>
-<code>variant: <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any_Any">copyable_any::Any</a></code>
-</dt>
-<dd>
-
-</dd>
-</dl>
-
-
-</details>
-
-<a id="0x1_mpc_TaskRaiseBySecret"></a>
-
-## Struct `TaskRaiseBySecret`
-
-
-
-<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_TaskRaiseBySecret">TaskRaiseBySecret</a> <b>has</b> <b>copy</b>, drop, store
-</code></pre>
-
-
-
-<details>
-<summary>Fields</summary>
-
-
-<dl>
-<dt>
 <code>group_element: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;</code>
 </dt>
 <dd>
@@ -132,7 +108,7 @@
 
 
 
-<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_TaskState">TaskState</a> <b>has</b> store
+<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_TaskState">TaskState</a> <b>has</b> <b>copy</b>, drop, store
 </code></pre>
 
 
@@ -165,7 +141,7 @@
 
 
 
-<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_State">State</a> <b>has</b> key
+<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_State">State</a> <b>has</b> <b>copy</b>, drop, store, key
 </code></pre>
 
 
@@ -179,13 +155,14 @@
 <code>shared_secrets: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="mpc.md#0x1_mpc_SharedSecretState">mpc::SharedSecretState</a>&gt;</code>
 </dt>
 <dd>
-
+ Currently only has 1 secret: the main secret.
 </dd>
 <dt>
 <code>tasks: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="mpc.md#0x1_mpc_TaskState">mpc::TaskState</a>&gt;</code>
 </dt>
 <dd>
- tasks[0] should always be <code><a href="mpc.md#0x1_mpc_raise_by_secret">raise_by_secret</a>(GENERATOR)</code>
+ The user request queue.
+ mpc todo: scale with Table/BigVector.
 </dd>
 </dl>
 
@@ -210,7 +187,7 @@
 
 <dl>
 <dt>
-<code>field_1: u64</code>
+<code>variant: <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any_Any">copyable_any::Any</a></code>
 </dt>
 <dd>
 
@@ -220,14 +197,13 @@
 
 </details>
 
-<a id="0x1_mpc_NewTaskEvent"></a>
+<a id="0x1_mpc_MPCEventReconfigStart"></a>
 
-## Struct `NewTaskEvent`
+## Struct `MPCEventReconfigStart`
 
 
 
-<pre><code>#[<a href="event.md#0x1_event">event</a>]
-<b>struct</b> <a href="mpc.md#0x1_mpc_NewTaskEvent">NewTaskEvent</a> <b>has</b> drop, store
+<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_MPCEventReconfigStart">MPCEventReconfigStart</a> <b>has</b> <b>copy</b>, drop, store
 </code></pre>
 
 
@@ -238,13 +214,13 @@
 
 <dl>
 <dt>
-<code>task_idx: u64</code>
+<code>epoch: u64</code>
 </dt>
 <dd>
 
 </dd>
 <dt>
-<code>task_spec: <a href="mpc.md#0x1_mpc_TaskSpec">mpc::TaskSpec</a></code>
+<code><a href="next_validator_set.md#0x1_next_validator_set">next_validator_set</a>: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;<a href="validator_consensus_info.md#0x1_validator_consensus_info_ValidatorConsensusInfo">validator_consensus_info::ValidatorConsensusInfo</a>&gt;</code>
 </dt>
 <dd>
 
@@ -254,14 +230,13 @@
 
 </details>
 
-<a id="0x1_mpc_TaskCompletedEvent"></a>
+<a id="0x1_mpc_MPCEventStateUpdated"></a>
 
-## Struct `TaskCompletedEvent`
+## Struct `MPCEventStateUpdated`
 
 
 
-<pre><code>#[<a href="event.md#0x1_event">event</a>]
-<b>struct</b> <a href="mpc.md#0x1_mpc_TaskCompletedEvent">TaskCompletedEvent</a> <b>has</b> drop, store
+<pre><code><b>struct</b> <a href="mpc.md#0x1_mpc_MPCEventStateUpdated">MPCEventStateUpdated</a> <b>has</b> <b>copy</b>, drop, store
 </code></pre>
 
 
@@ -272,13 +247,13 @@
 
 <dl>
 <dt>
-<code>task_idx: u64</code>
+<code>epoch: u64</code>
 </dt>
 <dd>
 
 </dd>
 <dt>
-<code>result: <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;</code>
+<code>new_state: <a href="mpc.md#0x1_mpc_State">mpc::State</a></code>
 </dt>
 <dd>
 
@@ -366,7 +341,11 @@ This resource exists under 0x1 iff MPC is enabled.
 <pre><code><b>public</b> <b>fun</b> <a href="mpc.md#0x1_mpc_on_async_reconfig_start">on_async_reconfig_start</a>() {
     <b>if</b> (<b>exists</b>&lt;<a href="mpc.md#0x1_mpc_FeatureEnabledFlag">FeatureEnabledFlag</a>&gt;(@aptos_framework)) {
         <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0722 - emitting <a href="mpc.md#0x1_mpc">mpc</a> <a href="event.md#0x1_event">event</a>"));
-        emit(<a href="mpc.md#0x1_mpc_MPCEvent">MPCEvent</a> { field_1: 99 })
+        <b>let</b> <a href="event.md#0x1_event">event</a> = <a href="mpc.md#0x1_mpc_MPCEventReconfigStart">MPCEventReconfigStart</a> {
+            epoch: <a href="reconfiguration.md#0x1_reconfiguration_current_epoch">reconfiguration::current_epoch</a>(),
+            <a href="next_validator_set.md#0x1_next_validator_set">next_validator_set</a>: <a href="next_validator_set.md#0x1_next_validator_set_load">next_validator_set::load</a>(),
+        };
+        emit(<a href="mpc.md#0x1_mpc_MPCEvent">MPCEvent</a> { variant: <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any_pack">copyable_any::pack</a>(<a href="event.md#0x1_event">event</a>)});
     }
 }
 </code></pre>
@@ -468,66 +447,27 @@ This resource exists under 0x1 iff MPC is enabled.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="mpc.md#0x1_mpc_raise_by_secret">raise_by_secret</a>(group_element: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;, secret_idx: u64): u64 <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
+    //<a href="mpc.md#0x1_mpc">mpc</a> todo: validate group_element
     <b>let</b> task_spec = <a href="mpc.md#0x1_mpc_TaskSpec">TaskSpec</a> {
-        variant: <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any_pack">copyable_any::pack</a>(<a href="mpc.md#0x1_mpc_TaskRaiseBySecret">TaskRaiseBySecret</a> {
-            group_element,
-            secret_idx
-        }),
+        group_element,
+        secret_idx
     };
 
     <b>let</b> task_state = <a href="mpc.md#0x1_mpc_TaskState">TaskState</a> {
         task: task_spec,
         result: <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>(),
     };
-    <b>let</b> task_list = &<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework).tasks;
-    <b>let</b> task_idx = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(task_list);
-    <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(task_list, task_state);
+    <b>let</b> state = <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework);
+    <b>let</b> task_idx = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&state.tasks);
+    <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> state.tasks, task_state);
 
-    <b>let</b> <a href="event.md#0x1_event">event</a> = <a href="mpc.md#0x1_mpc_NewTaskEvent">NewTaskEvent</a> {
-        task_idx,
-        task_spec
+    <b>let</b> <a href="event.md#0x1_event">event</a> = <a href="mpc.md#0x1_mpc_MPCEventStateUpdated">MPCEventStateUpdated</a> {
+        epoch: <a href="reconfiguration.md#0x1_reconfiguration_current_epoch">reconfiguration::current_epoch</a>(),
+        new_state: *state,
     };
-    emit(<a href="event.md#0x1_event">event</a>);
+    emit(<a href="mpc.md#0x1_mpc_MPCEvent">MPCEvent</a> { variant: <a href="../../aptos-stdlib/doc/copyable_any.md#0x1_copyable_any_pack">copyable_any::pack</a>(<a href="event.md#0x1_event">event</a>)});
 
     task_idx
-}
-</code></pre>
-
-
-
-</details>
-
-<a id="0x1_mpc_update_state"></a>
-
-## Function `update_state`
-
-When a MPC task is done, this is invoked by validator transactions.
-
-
-<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_update_state">update_state</a>()
-</code></pre>
-
-
-
-<details>
-<summary>Implementation</summary>
-
-
-<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_update_state">update_state</a>() <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
-    <b>let</b> state = <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework);
-    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_length">vector::length</a>(&state.shared_secrets) == 0) {
-        <b>let</b> secret = <a href="mpc.md#0x1_mpc_SharedSecretState">SharedSecretState</a> {
-            transcript_for_cur_epoch: <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_none">option::none</a>(),
-            transcript_for_next_epoch: <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(b"some_secret_transcript"),
-        };
-
-        <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_push_back">vector::push_back</a>(&<b>mut</b> state.shared_secrets, secret);
-    } <b>else</b> {
-        <b>let</b> secret_state = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow_mut">vector::borrow_mut</a>(&<b>mut</b> state.shared_secrets, 0);
-        <b>assert</b>!(<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_none">option::is_none</a>(&secret_state.transcript_for_next_epoch), 1);
-        secret_state.transcript_for_next_epoch = <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(b"some_secret_transcript");
-    };
-
 }
 </code></pre>
 
@@ -539,7 +479,7 @@ When a MPC task is done, this is invoked by validator transactions.
 
 ## Function `get_result`
 
-Used by user contract to get the result.
+Used by user contracts to get the result.
 
 
 <pre><code><b>public</b> <b>fun</b> <a href="mpc.md#0x1_mpc_get_result">get_result</a>(task_idx: u64): <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_Option">option::Option</a>&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt;
@@ -553,6 +493,69 @@ Used by user contract to get the result.
 
 <pre><code><b>public</b> <b>fun</b> <a href="mpc.md#0x1_mpc_get_result">get_result</a>(task_idx: u64): Option&lt;<a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;&gt; <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
     <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow">vector::borrow</a>(&<b>mut</b> <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework).tasks, task_idx).result
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_mpc_publish_reconfig_work_result"></a>
+
+## Function `publish_reconfig_work_result`
+
+When a MPC task is done, this is invoked by validator transactions.
+
+
+<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_publish_reconfig_work_result">publish_reconfig_work_result</a>(trx: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_publish_reconfig_work_result">publish_reconfig_work_result</a>(trx: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
+    <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0720 - publish_reconfig_work_result: begin"));
+    <b>let</b> state = <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework);
+    <b>let</b> secret_state = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow_mut">vector::borrow_mut</a>(&<b>mut</b> state.shared_secrets, 0);
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_none">option::is_none</a>(&secret_state.transcript_for_next_epoch)) {
+        <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0720 - publish_reconfig_work_result: <b>apply</b>"));
+        secret_state.transcript_for_next_epoch = <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(trx);
+    };
+    <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0720 - publish_reconfig_work_result: end"));
+}
+</code></pre>
+
+
+
+</details>
+
+<a id="0x1_mpc_publish_task_result"></a>
+
+## Function `publish_task_result`
+
+
+
+<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_publish_task_result">publish_task_result</a>(idx: u64, result: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;)
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>fun</b> <a href="mpc.md#0x1_mpc_publish_task_result">publish_task_result</a>(idx: u64, result: <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector">vector</a>&lt;u8&gt;) <b>acquires</b> <a href="mpc.md#0x1_mpc_State">State</a> {
+    <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0720 - publish_task_result: begin"));
+    <b>let</b> state = <b>borrow_global_mut</b>&lt;<a href="mpc.md#0x1_mpc_State">State</a>&gt;(@aptos_framework);
+    <b>let</b> task_state = <a href="../../aptos-stdlib/../move-stdlib/doc/vector.md#0x1_vector_borrow_mut">vector::borrow_mut</a>(&<b>mut</b> state.tasks, idx);
+    <b>if</b> (<a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_is_none">option::is_none</a>(&task_state.result)) {
+        <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0720 - publish_task_result: <b>apply</b>"));
+        task_state.result = <a href="../../aptos-stdlib/../move-stdlib/doc/option.md#0x1_option_some">option::some</a>(result);
+    };
+    <a href="../../aptos-stdlib/doc/debug.md#0x1_debug_print">debug::print</a>(&utf8(b"0720 - publish_task_result: end"));
 }
 </code></pre>
 

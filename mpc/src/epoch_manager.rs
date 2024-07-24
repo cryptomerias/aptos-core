@@ -15,7 +15,7 @@ use aptos_network::application::interface::NetworkClient;
 use aptos_network::protocols::network::Event;
 use aptos_reliable_broadcast::ReliableBroadcast;
 use aptos_types::epoch_state::EpochState;
-use aptos_types::mpc::{MPCEvent, MpcState};
+use aptos_types::mpc::{MPCEventMoveStruct, MPCState};
 use aptos_types::on_chain_config::{OnChainConfigPayload, OnChainConfigProvider, ValidatorSet};
 use aptos_validator_transaction_pool::VTxnPoolState;
 use move_core_types::account_address::AccountAddress;
@@ -38,7 +38,7 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     // Msgs to MPC manager
     mpc_rpc_msg_tx: Option<aptos_channel::Sender<AccountAddress, (AccountAddress, IncomingRpcRequest)>>,
     mpc_manager_close_tx: Option<oneshot::Sender<oneshot::Sender<()>>>,
-    mpc_event_tx: Option<aptos_channel::Sender<(), MPCEvent>>,
+    mpc_event_tx: Option<aptos_channel::Sender<(), MPCEventMoveStruct>>,
     vtxn_pool: VTxnPoolState,
 
     // Network utils
@@ -91,7 +91,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     epoch = self.epoch_state.as_ref().unwrap().epoch,
                     "0722 - on_mpc_event_notification: notification contains 1+ events"
                 );
-                match MPCEvent::try_from(&event) {
+                match MPCEventMoveStruct::try_from(&event) {
                     Ok(mpc_event) => {
                         debug!(
                             epoch = self.epoch_state.as_ref().unwrap().epoch,
@@ -150,7 +150,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
         let mpc_enabled = true; //mpc todo: check on-chain state instead
         if let (true, Some(my_index)) = (mpc_enabled, my_index) {
-            let mpc_state = payload.get::<MpcState>().unwrap_or_default();
+            let mpc_state = payload.get::<MPCState>().unwrap_or_default();
 
             let network_sender = self.create_network_sender();
             let rb = ReliableBroadcast::new(

@@ -20,7 +20,11 @@ pub fn is_vtxn_expected(
     match vtxn {
         ValidatorTransaction::DKGResult(_) => randomness_config.randomness_enabled(),
         ValidatorTransaction::ObservedJWKUpdate(_) => jwk_consensus_config.jwk_consensus_enabled(),
-        ValidatorTransaction::MPCStateUpdate => {
+        ValidatorTransaction::MPCUserRequestDone(_) => {
+            //mpc todo: should depend on whether the feature is enabled.
+            true
+        }
+        ValidatorTransaction::MPCReconfigWorkDone(_) => {
             //mpc todo: should depend on whether the feature is enabled.
             true
         }

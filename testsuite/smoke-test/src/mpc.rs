@@ -15,7 +15,7 @@ use rand::rngs::OsRng;
 use rand::thread_rng;
 use tokio::time::sleep;
 use aptos_crypto::bls12381;
-use aptos_types::mpc::MpcState;
+use aptos_types::mpc::MPCState;
 use crate::utils::get_on_chain_resource;
 use ff::Field;
 use group::{Curve, Group};
@@ -77,7 +77,7 @@ async fn raise_by_secret() {
     let t1 = tasks.tasks[1] as usize;
 
     tokio::time::sleep(Duration::from_secs(10)).await;
-    let mpc_state = get_on_chain_resource::<MpcState>(&rest_cli).await;
+    let mpc_state = get_on_chain_resource::<MPCState>(&rest_cli).await;
     let result_0_bytes = <[u8; 48]>::try_from(mpc_state.tasks[t0].result.clone().unwrap()).unwrap();
     let result_1_bytes = <[u8; 48]>::try_from(mpc_state.tasks[t1].result.clone().unwrap()).unwrap();
     let result_0 = blstrs::G1Affine::from_compressed(&result_0_bytes).unwrap();
