@@ -16,7 +16,13 @@ struct IndexMap<T: Clone + Ord> {
 pub(crate) struct StructNameIndexMap(RwLock<IndexMap<StructIdentifier>>);
 
 impl StructNameIndexMap {
-    #[allow(dead_code)]
+    pub(crate) fn empty() -> Self {
+        Self(RwLock::new(IndexMap {
+            forward_map: BTreeMap::new(),
+            backward_map: vec![],
+        }))
+    }
+
     pub(crate) fn struct_name_to_idx(&self, struct_name: StructIdentifier) -> StructNameIndex {
         if let Some(idx) = self.0.read().forward_map.get(&struct_name) {
             return StructNameIndex(*idx);
@@ -28,7 +34,6 @@ impl StructNameIndexMap {
         StructNameIndex(idx)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn idx_to_struct_name(
         &self,
         idx: StructNameIndex,

@@ -2,7 +2,6 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use super::StructNameCache;
 use crate::{
     loader::{
         function::{Function, FunctionHandle, FunctionInstantiation},
@@ -113,13 +112,13 @@ impl ModuleStorageAdapter {
         id: ModuleId,
         module_size: usize,
         module: Arc<CompiledModule>,
-        name_cache: &StructNameCache,
+        struct_name_index_map: &StructNameIndexMap,
     ) -> VMResult<Arc<Module>> {
         if let Some(cached) = self.module_at(&id) {
             return Ok(cached);
         }
 
-        match Module::new(natives, module_size, module, self, name_cache) {
+        match Module::new(natives, module_size, module, self, struct_name_index_map) {
             Ok(module) => Ok(self.modules.store_module(&id, module)),
             Err((err, _)) => Err(err.finish(Location::Undefined)),
         }
@@ -311,7 +310,7 @@ impl Module {
         size: usize,
         module: Arc<CompiledModule>,
         cache: &ModuleStorageAdapter,
-        name_cache: &StructNameCache,
+        struct_name_index_map: &StructNameIndexMap,
     ) -> Result<Self, (PartialVMError, Arc<CompiledModule>)> {
         let id = module.self_id();
 
@@ -345,12 +344,12 @@ impl Module {
                         .get_struct_type_by_identifier(struct_name, &module_id)?
                         .check_compatibility(struct_handle)?;
                 }
-                let name = StructIdentifier {
+                let struct_name = StructIdentifier {
                     module: module_id,
                     name: struct_name.to_owned(),
                 };
-                struct_idxs.push(name_cache.insert_or_get(name.clone()));
-                struct_names.push(name)
+                struct_idxs.push(struct_name_index_map.struct_name_to_idx(struct_name.clone()));
+                struct_names.push(struct_name)
             }
 
             // Build signature table

@@ -467,7 +467,7 @@ impl<'r, 'l> Session<'r, 'l> {
     pub fn get_struct_type(&self, idx: StructNameIndex) -> Option<Arc<StructType>> {
         match self.move_vm.runtime.loader() {
             Loader::V1(loader) => {
-                let name = loader.name_cache.idx_to_identifier(idx);
+                let name = loader.struct_name_index_map.idx_to_struct_name(idx);
                 self.module_store
                     .get_struct_type_by_identifier(&name.name, &name.module)
                     .ok()

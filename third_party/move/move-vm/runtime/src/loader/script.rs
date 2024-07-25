@@ -3,7 +3,7 @@
 
 use super::{
     intern_type, BinaryCache, Function, FunctionHandle, FunctionInstantiation,
-    ModuleStorageAdapter, Scope, ScriptHash, StructNameCache,
+    ModuleStorageAdapter, Scope, ScriptHash,
 };
 use crate::storage::{module_storage::ModuleStorage, struct_name_index_map::StructNameIndexMap};
 use move_binary_format::{
@@ -46,7 +46,6 @@ impl Script {
         _module_storage: &dyn ModuleStorage,
         _compiled_script: Arc<CompiledScript>,
         _script_hash: [u8; 32],
-        // Note: possibly we need to take script's hash for scope.
     ) -> PartialVMResult<Self> {
         unimplemented!()
     }
@@ -55,7 +54,7 @@ impl Script {
         script: Arc<CompiledScript>,
         script_hash: &ScriptHash,
         cache: &ModuleStorageAdapter,
-        name_cache: &StructNameCache,
+        struct_name_index_map: &StructNameIndexMap,
     ) -> VMResult<Self> {
         let mut struct_names = vec![];
         for struct_handle in script.struct_handles() {
@@ -68,7 +67,7 @@ impl Script {
                 .check_compatibility(struct_handle)
                 .map_err(|err| err.finish(Location::Script))?;
 
-            struct_names.push(name_cache.insert_or_get(StructIdentifier {
+            struct_names.push(struct_name_index_map.struct_name_to_idx(StructIdentifier {
                 module: module_id,
                 name: struct_name.to_owned(),
             }));
