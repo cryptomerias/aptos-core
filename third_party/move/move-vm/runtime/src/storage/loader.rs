@@ -3,7 +3,7 @@
 
 use crate::{
     config::VMConfig,
-    loader::{Function, Module},
+    loader::{Function, Module, TypeCache},
     module_traversal::TraversalContext,
     storage::{
         builders::{build_module, build_script},
@@ -16,7 +16,7 @@ use crate::{
 };
 use move_binary_format::{
     access::{ModuleAccess, ScriptAccess},
-    errors::{Location, PartialVMError, PartialVMResult, VMResult},
+    errors::{Location, PartialVMError, VMResult},
     CompiledModule,
 };
 use move_core_types::{
@@ -24,12 +24,11 @@ use move_core_types::{
     gas_algebra::NumBytes,
     identifier::IdentStr,
     language_storage::{ModuleId, TypeTag},
-    value::MoveTypeLayout,
     vm_status::StatusCode,
 };
 use move_vm_types::{
     gas::GasMeter,
-    loaded_data::runtime_types::{DepthFormula, StructNameIndex, StructType, Type, TypeBuilder},
+    loaded_data::runtime_types::{StructType, Type, TypeBuilder},
 };
 use parking_lot::RwLock;
 use std::{collections::BTreeMap, sync::Arc};
@@ -48,14 +47,7 @@ pub(crate) struct LoaderV2<V: Clone + Verifier> {
     //   These caches are owned by this loader and are not affected by module
     //   upgrades. When a new cache is added, the safety guarantees (i.e., why
     //   it is safe for the loader to own this cache) MUST be documented.
-
-    // Maps a struct to the corresponding type depth formula (since structs can be
-    // generic, we do not know depths of non-instantiated types).
-    // SAFETY:
-    //   Every struct has the same depth formula even after upgrade.
-    #[allow(dead_code)]
-    depth_formula_cache: RwLock<hashbrown::HashMap<StructNameIndex, DepthFormula>>,
-    // TODO(George): Add remaining type caches here for layouts and tags.
+    pub(crate) ty_cache: RwLock<TypeCache>,
 }
 
 impl<V: Clone + Verifier> LoaderV2<V> {
@@ -161,7 +153,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
                     module_storage,
                     cs,
                     // TODO(George): We re-calculate the script hash because function
-                    //   is not aware of the context in which it executes. Revisit.c
+                    //   is not aware of the context in which it executes. Revisit.
                     script_hash,
                 )
             })
@@ -277,48 +269,6 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         _module_storage: &impl ModuleStorage,
         _modules: &[CompiledModule],
     ) -> VMResult<()> {
-        // TODO: add type cache and implement in a nicer way, or reuse that code.
-        unimplemented!()
-    }
-
-    pub(crate) fn ty_to_ty_layout_with_identifier_mappings(
-        &self,
-        _module_storage: &dyn ModuleStorage,
-        _ty: &Type,
-    ) -> PartialVMResult<(MoveTypeLayout, bool)> {
-        // TODO: add type cache and implement in a nicer way, or reuse that code.
-        unimplemented!()
-    }
-
-    pub(crate) fn ty_to_ty_layout(
-        &self,
-        _module_storage: &dyn ModuleStorage,
-        _ty: &Type,
-    ) -> PartialVMResult<MoveTypeLayout> {
-        // TODO: add type cache and implement in a nicer way, or reuse that code.
-        unimplemented!()
-    }
-
-    pub(crate) fn ty_to_fully_annotated_ty_layout(
-        &self,
-        _module_storage: &dyn ModuleStorage,
-        _ty: &Type,
-    ) -> PartialVMResult<MoveTypeLayout> {
-        // TODO: add type cache and implement in a nicer way, or reuse that code.
-        unimplemented!()
-    }
-
-    pub(crate) fn ty_to_ty_tag(&self, _ty: &Type) -> PartialVMResult<TypeTag> {
-        // TODO: add type cache and implement in a nicer way, or reuse that code.
-        unimplemented!()
-    }
-
-    pub(crate) fn calculate_depth_of_struct(
-        &self,
-        _module_storage: &dyn ModuleStorage,
-        _struct_name_idx: StructNameIndex,
-    ) -> PartialVMResult<DepthFormula> {
-        // TODO: add type cache and implement in a nicer way, or reuse that code.
         unimplemented!()
     }
 
@@ -337,7 +287,7 @@ impl<V: Clone + Verifier> Clone for LoaderV2<V> {
             struct_name_index_map: self.struct_name_index_map.clone(),
             vm_config: self.vm_config.clone(),
             verifier: self.verifier.clone(),
-            depth_formula_cache: RwLock::new(self.depth_formula_cache.read().clone()),
+            ty_cache: RwLock::new(self.ty_cache.read().clone()),
         }
     }
 }

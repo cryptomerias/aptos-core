@@ -465,24 +465,21 @@ impl<'r, 'l> Session<'r, 'l> {
     }
 
     pub fn get_struct_type(&self, idx: StructNameIndex) -> Option<Arc<StructType>> {
+        let loader = self.move_vm.runtime.loader();
+        let struct_name = loader.struct_name_index_map().idx_to_struct_name(idx);
         match self.move_vm.runtime.loader() {
-            Loader::V1(loader) => {
-                let name = loader.struct_name_index_map.idx_to_struct_name(idx);
-                self.module_store
-                    .get_struct_type_by_identifier(&name.name, &name.module)
-                    .ok()
-            },
-            Loader::V2(loader) => {
-                let name = loader.struct_name_index_map.idx_to_struct_name(idx);
-                loader
-                    .load_struct_ty(
-                        &DummyStorage,
-                        name.module.address(),
-                        name.module.name(),
-                        name.name.as_ident_str(),
-                    )
-                    .ok()
-            },
+            Loader::V1(_) => self
+                .module_store
+                .get_struct_type_by_identifier(&struct_name.name, &struct_name.module)
+                .ok(),
+            Loader::V2(loader) => loader
+                .load_struct_ty(
+                    &DummyStorage,
+                    struct_name.module.address(),
+                    struct_name.module.name(),
+                    struct_name.name.as_ident_str(),
+                )
+                .ok(),
         }
     }
 
