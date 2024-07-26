@@ -629,12 +629,15 @@ impl LoaderV1 {
                     data_store,
                     module_store,
                 )?;
+
+                let checker = LoaderV1StructTypeAbilityChecker { module_store };
                 let script = Script::new(
                     ver_script,
                     &hash_value,
-                    module_store,
+                    &checker,
                     &self.struct_name_index_map,
-                )?;
+                )
+                .map_err(|e| e.finish(Location::Script))?;
                 scripts.insert(hash_value, script)
             },
         };

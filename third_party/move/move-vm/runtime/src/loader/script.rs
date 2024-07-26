@@ -2,14 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{
-    intern_type, BinaryCache, Function, FunctionHandle, FunctionInstantiation,
-    ModuleStorageAdapter, Scope, ScriptHash,
+    intern_type, BinaryCache, Function, FunctionHandle, FunctionInstantiation, Scope, ScriptHash,
 };
-use crate::storage::{module_storage::ModuleStorage, struct_name_index_map::StructNameIndexMap};
+use crate::storage::{
+    struct_name_index_map::StructNameIndexMap,
+    struct_type_ability_checker::StructTypeAbilityChecker,
+};
 use move_binary_format::{
     access::ScriptAccess,
     binary_views::BinaryIndexedView,
-    errors::{Location, PartialVMError, PartialVMResult, VMResult},
+    errors::{PartialVMError, PartialVMResult},
     file_format::{Bytecode, CompiledScript, FunctionDefinitionIndex, Signature, SignatureIndex},
 };
 use move_core_types::{identifier::Identifier, language_storage::ModuleId, vm_status::StatusCode};
@@ -41,31 +43,19 @@ pub struct Script {
 }
 
 impl Script {
-    pub(crate) fn new_v2(
-        _module_storage: &dyn ModuleStorage,
-        _compiled_script: Arc<CompiledScript>,
-        _script_hash: [u8; 32],
-    ) -> PartialVMResult<Self> {
-        unimplemented!()
-    }
-
     pub(crate) fn new(
         script: Arc<CompiledScript>,
         script_hash: &ScriptHash,
-        cache: &ModuleStorageAdapter,
+        struct_ability_checker: &impl StructTypeAbilityChecker,
         struct_name_index_map: &StructNameIndexMap,
-    ) -> VMResult<Self> {
+    ) -> PartialVMResult<Self> {
         let mut struct_names = vec![];
         for struct_handle in script.struct_handles() {
             let struct_name = script.identifier_at(struct_handle.name);
             let module_handle = script.module_handle_at(struct_handle.module);
             let module_id = script.module_id_for_handle(module_handle);
-            cache
-                .get_struct_type_by_identifier(struct_name, &module_id)
-                .map_err(|err| err.finish(Location::Script))?
-                .check_compatibility(struct_handle)
-                .map_err(|err| err.finish(Location::Script))?;
 
+            struct_ability_checker.paranoid_check(&module_id, struct_name, struct_handle)?;
             struct_names.push(struct_name_index_map.struct_name_to_idx(StructIdentifier {
                 module: module_id,
                 name: struct_name.to_owned(),
@@ -91,10 +81,11 @@ impl Script {
             let handle = function_refs[func_inst.handle.0 as usize].clone();
             let mut instantiation = vec![];
             for ty in &script.signature_at(func_inst.type_parameters).0 {
-                instantiation.push(
-                    intern_type(BinaryIndexedView::Script(&script), ty, &struct_names)
-                        .map_err(|e| e.finish(Location::Script))?,
-                );
+                instantiation.push(intern_type(
+                    BinaryIndexedView::Script(&script),
+                    ty,
+                    &struct_names,
+                )?);
             }
             function_instantiations.push(FunctionInstantiation {
                 handle,
@@ -111,8 +102,7 @@ impl Script {
             .0
             .iter()
             .map(|tok| intern_type(BinaryIndexedView::Script(&script), tok, &struct_names))
-            .collect::<PartialVMResult<Vec<_>>>()
-            .map_err(|err| err.finish(Location::Undefined))?;
+            .collect::<PartialVMResult<Vec<_>>>()?;
         let locals = Signature(
             parameters
                 .0
@@ -125,8 +115,7 @@ impl Script {
             .0
             .iter()
             .map(|tok| intern_type(BinaryIndexedView::Script(&script), tok, &struct_names))
-            .collect::<PartialVMResult<Vec<_>>>()
-            .map_err(|err| err.finish(Location::Undefined))?;
+            .collect::<PartialVMResult<Vec<_>>>()?;
         let ty_param_abilities = script.type_parameters.clone();
         // TODO: main does not have a name. Revisit.
         let name = Identifier::new("main").unwrap();
@@ -170,15 +159,13 @@ impl Script {
                                     "the type argument for vector-related bytecode \
                                                 expects one and only one signature token"
                                         .to_owned(),
-                                )
-                                .finish(Location::Script));
+                                ));
                             },
                             Some(sig_token) => sig_token,
                         };
                         single_signature_token_map.insert(
                             *si,
-                            intern_type(BinaryIndexedView::Script(&script), ty, &struct_names)
-                                .map_err(|e| e.finish(Location::Script))?,
+                            intern_type(BinaryIndexedView::Script(&script), ty, &struct_names)?,
                         );
                     }
                 },

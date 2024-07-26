@@ -5,10 +5,12 @@ use crate::{
     config::VMConfig,
     loader::{Function, Module, Script, TypeCache},
     module_traversal::TraversalContext,
+    native_functions::NativeFunctions,
     storage::{
         module_storage::ModuleStorage,
         script_storage::{script_hash, ScriptStorage},
         struct_name_index_map::StructNameIndexMap,
+        struct_type_ability_checker::LoaderV2StructTypeAbilityChecker,
         verifier::Verifier,
     },
     unexpected_unimplemented_error, LoadedFunction,
@@ -44,6 +46,12 @@ pub(crate) struct LoaderV2<V: Clone + Verifier> {
     // Verifier instance which runs passes when scripts or modules are loaded for
     // the first time.
     verifier: V,
+
+    // All registered native functions the loader is aware of. When loaded modules
+    // are constructed, existing native functions are inlined in the loaded module
+    // representation, so that the interpreter can call them directly.
+    #[allow(dead_code)]
+    natives: NativeFunctions,
 
     // Local caches:
     //   These caches are owned by this loader and are not affected by module
@@ -273,6 +281,7 @@ impl<V: Clone + Verifier> Clone for LoaderV2<V> {
             struct_name_index_map: self.struct_name_index_map.clone(),
             vm_config: self.vm_config.clone(),
             verifier: self.verifier.clone(),
+            natives: self.natives.clone(),
             ty_cache: RwLock::new(self.ty_cache.read().clone()),
         }
     }
@@ -308,7 +317,16 @@ impl<V: Clone + Verifier> LoaderV2<V> {
             imm_dependencies.iter().map(|m| m.as_ref()),
         )?;
 
-        Script::new_v2(module_storage, compiled_script, script_hash)
+        let checker = LoaderV2StructTypeAbilityChecker {
+            loader: self,
+            module_storage,
+        };
+        Script::new(
+            compiled_script,
+            &script_hash,
+            &checker,
+            &self.struct_name_index_map,
+        )
     }
 
     /// Given loader's context, builds a new verified module instance.
@@ -332,6 +350,21 @@ impl<V: Clone + Verifier> LoaderV2<V> {
             compiled_module.as_ref(),
             imm_dependencies.iter().map(|m| m.as_ref()),
         )?;
-        Module::new_v2(module_storage, compiled_module)
+
+        let checker = LoaderV2StructTypeAbilityChecker {
+            loader: self,
+            module_storage,
+        };
+
+        // TODO(George): While we do not need size anymore, fetch the correct value just in case.
+        let size = module_storage
+            .fetch_module_size_in_bytes(compiled_module.self_addr(), compiled_module.self_name())?;
+        Module::new(
+            &self.natives,
+            size,
+            compiled_module,
+            &checker,
+            &self.struct_name_index_map,
+        )
     }
 }

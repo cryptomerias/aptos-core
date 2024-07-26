@@ -10,7 +10,8 @@ use crate::{
     },
     native_functions::NativeFunctions,
     storage::{
-        module_storage::ModuleStorage as ModuleStorageV2, struct_name_index_map::StructNameIndexMap,
+        struct_name_index_map::StructNameIndexMap,
+        struct_type_ability_checker::{LoaderV1StructTypeAbilityChecker, StructTypeAbilityChecker},
     },
 };
 use move_binary_format::{
@@ -118,9 +119,16 @@ impl ModuleStorageAdapter {
             return Ok(cached);
         }
 
-        match Module::new(natives, module_size, module, self, struct_name_index_map) {
+        let checker = LoaderV1StructTypeAbilityChecker { module_store: self };
+        match Module::new(
+            natives,
+            module_size,
+            module,
+            &checker,
+            struct_name_index_map,
+        ) {
             Ok(module) => Ok(self.modules.store_module(&id, module)),
-            Err((err, _)) => Err(err.finish(Location::Undefined)),
+            Err(err) => Err(err.finish(Location::Undefined)),
         }
     }
 
@@ -297,20 +305,13 @@ pub(crate) struct VariantFieldInfo {
 }
 
 impl Module {
-    pub(crate) fn new_v2(
-        _module_storage: &dyn ModuleStorageV2,
-        _compiled_module: Arc<CompiledModule>,
-    ) -> PartialVMResult<Self> {
-        unimplemented!()
-    }
-
     pub(crate) fn new(
         natives: &NativeFunctions,
         size: usize,
         module: Arc<CompiledModule>,
-        cache: &ModuleStorageAdapter,
+        struct_ability_checker: &impl StructTypeAbilityChecker,
         struct_name_index_map: &StructNameIndexMap,
-    ) -> Result<Self, (PartialVMError, Arc<CompiledModule>)> {
+    ) -> PartialVMResult<Self> {
         let id = module.self_id();
 
         let mut structs = vec![];
@@ -339,9 +340,11 @@ impl Module {
                 let module_id = module.module_id_for_handle(module_handle);
 
                 if module_handle != module.self_handle() {
-                    cache
-                        .get_struct_type_by_identifier(struct_name, &module_id)?
-                        .check_compatibility(struct_handle)?;
+                    struct_ability_checker.paranoid_check(
+                        &module_id,
+                        struct_name,
+                        struct_handle,
+                    )?;
                 }
                 let struct_name = StructIdentifier {
                     module: module_id,
@@ -588,7 +591,7 @@ impl Module {
                 struct_map,
                 single_signature_token_map,
             }),
-            Err(err) => Err((err, module)),
+            Err(err) => Err(err),
         }
     }
 
