@@ -166,7 +166,7 @@ where
             .pre_commit(block_id, parent_block_id)
     }
 
-    fn latest_synced_version(&self) -> u64 {
+    fn pre_committed_version(&self) -> u64 {
         self.inner
             .read()
             .as_ref()

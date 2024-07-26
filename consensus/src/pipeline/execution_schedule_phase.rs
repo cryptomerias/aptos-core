@@ -98,7 +98,7 @@ impl StatelessPipeline for ExecutionSchedulePhase {
                     input_txns,
                     result,
                     execution_time,
-                    commit_rx,
+                    pre_commit_result_rx: commit_rx,
                 } = fut.await?;
                 results.push(block.set_execution_result(
                     input_txns,

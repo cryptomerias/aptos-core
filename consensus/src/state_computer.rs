@@ -44,7 +44,7 @@ pub struct PipelineExecutionResult {
     pub input_txns: Vec<SignedTransaction>,
     pub result: StateComputeResult,
     pub execution_time: Duration,
-    pub commit_rx: oneshot::Receiver<ExecutorResult<()>>,
+    pub pre_commit_result_rx: oneshot::Receiver<ExecutorResult<()>>,
 }
 
 impl PipelineExecutionResult {
@@ -52,13 +52,13 @@ impl PipelineExecutionResult {
         input_txns: Vec<SignedTransaction>,
         result: StateComputeResult,
         execution_time: Duration,
-        commit_rx: oneshot::Receiver<ExecutorResult<()>>,
+        pre_commit_result_rx: oneshot::Receiver<ExecutorResult<()>>,
     ) -> Self {
         Self {
             input_txns,
             result,
             execution_time,
-            commit_rx,
+            pre_commit_result_rx,
         }
     }
 }
@@ -309,7 +309,7 @@ impl StateComputer for ExecutionProxy {
 
             txns.extend(self.transactions_to_commit(block, &validators, is_randomness_enabled));
             subscribable_txn_events.extend(block.subscribable_events());
-            pre_commit_rxs.push(block.take_commit_rx());
+            pre_commit_rxs.push(block.take_pre_commit_result_rx());
         }
 
         // wait until all blocks are committed
@@ -355,12 +355,12 @@ impl StateComputer for ExecutionProxy {
         if self.executor.committed_block_id() == target.commit_info().id() {
             return Ok(());
         }
-        if self.executor.latest_synced_version() == target.commit_info().version() {
+        if self.executor.pre_committed_version() == target.commit_info().version() {
             // write the ledger down directly if it's already pre-commit (for epoch ending)
             info!("Write the ledger info directly as it's already pre-committed.");
             self.executor
                 .commit_blocks_ext(vec![target.commit_info().id()], target, false)
-                .unwrap();
+                .expect("Failed to commit ");
             return Ok(());
         }
         // Before the state synchronization, we have to call finish() to free the in-memory SMT

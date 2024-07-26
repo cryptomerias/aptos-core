@@ -196,7 +196,7 @@ pub trait BlockExecutorTrait: Send + Sync {
 
     fn pre_commit(&self, block_id: HashValue, parent_block_id: HashValue) -> ExecutorResult<()>;
 
-    fn latest_synced_version(&self) -> Version;
+    fn pre_committed_version(&self) -> Version;
 
     /// Finishes the block executor by releasing memory held by inner data structures(SMT).
     fn finish(&self);
