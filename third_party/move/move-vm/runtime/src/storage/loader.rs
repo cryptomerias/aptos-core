@@ -11,7 +11,7 @@ use crate::{
         struct_name_index_map::StructNameIndexMap,
         verifier::Verifier,
     },
-    LoadedFunction,
+    unexpected_unimplemented_error, LoadedFunction,
 };
 use move_binary_format::{
     access::{ModuleAccess, ScriptAccess},
@@ -214,7 +214,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
     /// containing the struct is loaded.
     pub(crate) fn load_struct_ty(
         &self,
-        module_storage: &impl ModuleStorage,
+        module_storage: &dyn ModuleStorage,
         address: &AccountAddress,
         module_name: &IdentStr,
         struct_name: &IdentStr,
@@ -261,9 +261,9 @@ impl<V: Clone + Verifier> LoaderV2<V> {
     pub(crate) fn verify_modules_for_publication(
         &self,
         _module_storage: &impl ModuleStorage,
-        _modules: &[CompiledModule],
+        _published_modules: &[CompiledModule],
     ) -> PartialVMResult<()> {
-        unimplemented!()
+        unexpected_unimplemented_error!()
     }
 }
 

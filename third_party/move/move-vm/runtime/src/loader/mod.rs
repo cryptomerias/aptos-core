@@ -5,7 +5,7 @@
 use crate::{
     config::VMConfig, data_cache::TransactionDataCache, logging::expect_no_verification_errors,
     module_traversal::TraversalContext, native_functions::NativeFunctions,
-    storage::module_storage::ModuleStorage as ModuleStorageV2, DummyStorage,
+    storage::module_storage::ModuleStorage as ModuleStorageV2,
 };
 use hashbrown::Equivalent;
 use lazy_static::lazy_static;
@@ -463,6 +463,26 @@ impl Loader {
         match self {
             Self::V1(loader) => loader.struct_name_index_map.idx_to_struct_name(struct_idx),
             Self::V2(loader) => loader.struct_name_index_map.idx_to_struct_name(struct_idx),
+        }
+    }
+
+    pub fn get_struct_type(
+        &self,
+        idx: StructNameIndex,
+        module_store: &ModuleStorageAdapter,
+        module_storage: &dyn ModuleStorageV2,
+    ) -> PartialVMResult<Arc<StructType>> {
+        let struct_name = self.struct_name_index_map().idx_to_struct_name(idx);
+        match self {
+            Loader::V1(_) => {
+                module_store.get_struct_type_by_identifier(&struct_name.name, &struct_name.module)
+            },
+            Loader::V2(loader) => loader.load_struct_ty(
+                module_storage,
+                struct_name.module.address(),
+                struct_name.module.name(),
+                struct_name.name.as_ident_str(),
+            ),
         }
     }
 
@@ -1825,20 +1845,7 @@ impl Loader {
         }
 
         let count_before = *count;
-
-        let struct_name = &*self
-            .struct_name_index_map()
-            .idx_to_struct_name(struct_name_idx);
-        let struct_type = match self {
-            Self::V1(_) => module_store
-                .get_struct_type_by_identifier(&struct_name.name, &struct_name.module)?,
-            Self::V2(loader) => loader.load_struct_ty(
-                &DummyStorage,
-                struct_name.module.address(),
-                struct_name.module.name(),
-                struct_name.name.as_ident_str(),
-            )?,
-        };
+        let struct_type = self.get_struct_type(struct_name_idx, module_store, module_storage)?;
 
         let mut has_identifier_mappings = false;
 
@@ -1846,6 +1853,9 @@ impl Loader {
             StructLayout::Single(fields) => {
                 // Some types can have fields which are lifted at serialization or deserialization
                 // times. Right now these are Aggregator and AggregatorSnapshot.
+                let struct_name = &*self
+                    .struct_name_index_map()
+                    .idx_to_struct_name(struct_name_idx);
                 let maybe_mapping = self.get_identifier_mapping_kind(struct_name);
 
                 let field_tys = fields
@@ -2081,19 +2091,7 @@ impl Loader {
             }
         }
 
-        let struct_name = &*self
-            .struct_name_index_map()
-            .idx_to_struct_name(struct_name_idx);
-        let struct_type = match self {
-            Self::V1(_) => module_store
-                .get_struct_type_by_identifier(&struct_name.name, &struct_name.module)?,
-            Self::V2(loader) => loader.load_struct_ty(
-                &DummyStorage,
-                struct_name.module.address(),
-                struct_name.module.name(),
-                struct_name.name.as_ident_str(),
-            )?,
-        };
+        let struct_type = self.get_struct_type(struct_name_idx, module_store, module_storage)?;
 
         // TODO(#13806): have annotated layouts for variants. Currently, we just return the raw
         //   layout for them.
@@ -2223,19 +2221,7 @@ impl Loader {
             return Ok(depth_formula.clone());
         }
 
-        let struct_name = &*self
-            .struct_name_index_map()
-            .idx_to_struct_name(struct_name_idx);
-        let struct_type = match self {
-            Self::V1(_) => module_store
-                .get_struct_type_by_identifier(&struct_name.name, &struct_name.module)?,
-            Self::V2(loader) => loader.load_struct_ty(
-                &DummyStorage,
-                struct_name.module.address(),
-                struct_name.module.name(),
-                struct_name.name.as_ident_str(),
-            )?,
-        };
+        let struct_type = self.get_struct_type(struct_name_idx, module_store, module_storage)?;
         let formulas = match &struct_type.layout {
             StructLayout::Single(fields) => fields
                 .iter()
@@ -2260,6 +2246,9 @@ impl Loader {
             //       correct because some other thread can cache depth formula before we reach
             //       this line, and result in an invariant violation. We need to ensure correct
             //       behavior, e.g., make the cache available per thread.
+            let struct_name = &*self
+                .struct_name_index_map()
+                .idx_to_struct_name(struct_name_idx);
             return Err(
                 PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
                     format!(

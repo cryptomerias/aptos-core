@@ -16,15 +16,21 @@ use move_core_types::{
 };
 use std::sync::Arc;
 
-macro_rules! not_implemented {
+/// An error which is returned in case unimplemented code is reached. This is just a safety
+/// precaution to avoid panics in case we forget some gating.
+#[macro_export]
+macro_rules! unexpected_unimplemented_error {
     () => {
-        Err(PartialVMError::new(StatusCode::FEATURE_UNDER_GATING)
-            .with_message("New loader and code cache are not yet implemented".to_string()))
+        Err(
+            PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                .with_message("New loader and code cache are not yet implemented".to_string()),
+        )
     };
 }
 
 /// Dummy implementation of code storage, to be removed in the future. Used as a placeholder
-/// so that existing APIs can work
+/// so that existing APIs can work, i.e., for now client side which has no script or module
+/// storage can be still connected to the new V2 APIs by using the dummy.
 pub struct DummyStorage;
 
 impl ModuleStorage for DummyStorage {
@@ -33,7 +39,7 @@ impl ModuleStorage for DummyStorage {
         _address: &AccountAddress,
         _module_name: &IdentStr,
     ) -> PartialVMResult<bool> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn fetch_module_size_in_bytes(
@@ -41,7 +47,7 @@ impl ModuleStorage for DummyStorage {
         _address: &AccountAddress,
         _module_name: &IdentStr,
     ) -> PartialVMResult<usize> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn fetch_module_metadata(
@@ -49,7 +55,7 @@ impl ModuleStorage for DummyStorage {
         _address: &AccountAddress,
         _module_name: &IdentStr,
     ) -> PartialVMResult<&[Metadata]> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn fetch_deserialized_module(
@@ -57,7 +63,7 @@ impl ModuleStorage for DummyStorage {
         _address: &AccountAddress,
         _module_name: &IdentStr,
     ) -> PartialVMResult<Arc<CompiledModule>> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn fetch_or_create_verified_module(
@@ -66,7 +72,7 @@ impl ModuleStorage for DummyStorage {
         _module_name: &IdentStr,
         _f: &dyn Fn(Arc<CompiledModule>) -> PartialVMResult<Module>,
     ) -> PartialVMResult<Arc<Module>> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 }
 
@@ -75,7 +81,7 @@ impl ScriptStorage for DummyStorage {
         &self,
         _serialized_script: &[u8],
     ) -> PartialVMResult<Arc<CompiledScript>> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn fetch_or_create_verified_script(
@@ -83,7 +89,7 @@ impl ScriptStorage for DummyStorage {
         _serialized_script: &[u8],
         _f: &dyn Fn(Arc<CompiledScript>) -> PartialVMResult<Script>,
     ) -> PartialVMResult<Arc<Script>> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn fetch_existing_verified_script(&self, _script_hash: &[u8; 32]) -> Arc<Script> {
@@ -97,7 +103,7 @@ pub struct DummyVerifier;
 
 impl Verifier for DummyVerifier {
     fn verify_script(&self, _script: &CompiledScript) -> PartialVMResult<()> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn verify_script_with_dependencies<'a>(
@@ -105,11 +111,11 @@ impl Verifier for DummyVerifier {
         _script: &CompiledScript,
         _dependencies: impl IntoIterator<Item = &'a Module>,
     ) -> PartialVMResult<()> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn verify_module(&self, _module: &CompiledModule) -> PartialVMResult<()> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 
     fn verify_module_with_dependencies<'a>(
@@ -117,6 +123,6 @@ impl Verifier for DummyVerifier {
         _module: &CompiledModule,
         _dependencies: impl IntoIterator<Item = &'a Module>,
     ) -> PartialVMResult<()> {
-        not_implemented!()
+        unexpected_unimplemented_error!()
     }
 }
