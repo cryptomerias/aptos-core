@@ -669,15 +669,6 @@ impl Interpreter {
                 .map_err(|err| err.to_partial())
             },
             NativeResult::LoadModule { module_name } => {
-                if let Loader::V2(_) = resolver.loader() {
-                    if !module_storage
-                        .check_module_exists(module_name.address(), module_name.name())?
-                    {
-                        // TODO: add message, double-check
-                        return Err(PartialVMError::new(StatusCode::LINKER_ERROR));
-                    }
-                }
-
                 let arena_id = traversal_context
                     .referenced_module_ids
                     .alloc(module_name.clone());
@@ -698,15 +689,14 @@ impl Interpreter {
                             format!("Failed to charge transitive dependency for {}. Does this module exists?", module_name)
                         ))?;
 
-                // TODO(George): What??? Why do we need to load the module here. V2 does not
-                //               need this I think.
-                resolver
-                    .loader()
-                    .load_module(&module_name, data_store, module_store, module_storage)
-                    .map_err(|_| {
-                        PartialVMError::new(StatusCode::FUNCTION_RESOLUTION_FAILURE)
-                            .with_message(format!("Module {} doesn't exist", module_name))
-                    })?;
+                if let Loader::V1(loader) = resolver.loader() {
+                    loader
+                        .load_module(&module_name, data_store, module_store)
+                        .map_err(|_| {
+                            PartialVMError::new(StatusCode::FUNCTION_RESOLUTION_FAILURE)
+                                .with_message(format!("Module {} doesn't exist", module_name))
+                        })?;
+                }
 
                 current_frame.pc += 1; // advance past the Call instruction in the caller
                 Ok(())

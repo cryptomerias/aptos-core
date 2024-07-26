@@ -71,8 +71,6 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         &self.vm_config.ty_builder
     }
 
-    // Note: same as check_script_dependencies_and_check_gas in loader V1, but also checks if
-    // script dependencies exist prior to checking them.
     // TODO(George): Port TODOs and description from loader V1. Keep things like this for now
     //               to make the code more concise.
     pub(crate) fn check_script_dependencies_and_check_gas(
@@ -86,13 +84,6 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         let compiled_script = script_storage.fetch_deserialized_script(serialized_script)?;
         let compiled_script = traversal_context.referenced_scripts.alloc(compiled_script);
 
-        for (addr, name) in compiled_script.immediate_dependencies_iter() {
-            if !module_storage.check_module_exists(addr, name)? {
-                let msg = format!("Script dependency {}::{} does not exist", addr, name,);
-                return Err(PartialVMError::new(StatusCode::LINKER_ERROR).with_message(msg));
-            }
-        }
-
         self.check_dependencies_and_charge_gas(
             module_storage,
             gas_meter,
@@ -104,8 +95,6 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         Ok(())
     }
 
-    // Note: same as check_dependencies_and_charge_gas in loader V1 but the associated modules
-    // (i.e., ids) must exist and the caller has to check that for consistent error messages.
     // TODO(George): Port TODOs and description from loader V1. Keep things like this for now
     //               to make the code more concise.
     pub(crate) fn check_dependencies_and_charge_gas<'a, I>(
