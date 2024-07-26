@@ -217,14 +217,12 @@ impl<'a, 'b, 'c> NativeContext<'a, 'b, 'c> {
                     .module_store()
                     .resolve_function_by_name(function_name, module)
             },
-            Loader::V2(loader) => loader
-                .load_function_without_ty_args(
-                    self.resolver.module_storage(),
-                    module.address(),
-                    module.name(),
-                    function_name,
-                )
-                .map_err(|e| e.to_partial()),
+            Loader::V2(loader) => loader.load_function_without_ty_args(
+                self.resolver.module_storage(),
+                module.address(),
+                module.name(),
+                function_name,
+            ),
         }
     }
 }

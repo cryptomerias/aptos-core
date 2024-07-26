@@ -216,13 +216,15 @@ impl Loader {
                 traversal_context,
                 script_blob,
             ),
-            Self::V2(loader) => loader.check_script_dependencies_and_check_gas(
-                module_storage,
-                script_storage,
-                gas_meter,
-                traversal_context,
-                script_blob,
-            ),
+            Self::V2(loader) => loader
+                .check_script_dependencies_and_check_gas(
+                    module_storage,
+                    script_storage,
+                    gas_meter,
+                    traversal_context,
+                    script_blob,
+                )
+                .map_err(|e| e.finish(Location::Undefined)),
         }
     }
 
@@ -249,13 +251,15 @@ impl Loader {
                 referenced_modules,
                 ids,
             ),
-            Self::V2(loader) => loader.check_dependencies_and_charge_gas(
-                module_storage,
-                gas_meter,
-                visited,
-                referenced_modules,
-                ids,
-            ),
+            Self::V2(loader) => loader
+                .check_dependencies_and_charge_gas(
+                    module_storage,
+                    gas_meter,
+                    visited,
+                    referenced_modules,
+                    ids,
+                )
+                .map_err(|e| e.finish(Location::Undefined)),
         }
     }
 
@@ -270,9 +274,9 @@ impl Loader {
     ) -> VMResult<LoadedFunction> {
         match self {
             Self::V1(loader) => loader.load_script(script_blob, ty_args, data_store, module_store),
-            Self::V2(loader) => {
-                loader.load_script(module_storage, script_storage, script_blob, ty_args)
-            },
+            Self::V2(loader) => loader
+                .load_script(module_storage, script_storage, script_blob, ty_args)
+                .map_err(|e| e.finish(Location::Undefined)),
         }
     }
 
@@ -285,7 +289,9 @@ impl Loader {
     ) -> VMResult<Arc<Module>> {
         match self {
             Loader::V1(loader) => loader.load_module(id, data_store, module_store),
-            Loader::V2(loader) => loader.load_module(module_storage, id.address(), id.name()),
+            Loader::V2(loader) => loader
+                .load_module(module_storage, id.address(), id.name())
+                .map_err(|e| e.finish(Location::Undefined)),
         }
     }
 
@@ -305,12 +311,14 @@ impl Loader {
                     .resolve_function_by_name(function_name, module_id)
                     .map_err(|err| err.finish(Location::Undefined))
             },
-            Loader::V2(loader) => loader.load_function_without_ty_args(
-                module_storage,
-                module_id.address(),
-                module_id.name(),
-                function_name,
-            ),
+            Loader::V2(loader) => loader
+                .load_function_without_ty_args(
+                    module_storage,
+                    module_id.address(),
+                    module_id.name(),
+                    function_name,
+                )
+                .map_err(|e| e.finish(Location::Undefined)),
         }
     }
 
@@ -419,7 +427,9 @@ impl Loader {
             Self::V1(loader) => {
                 loader.verify_module_bundle_for_publication(modules, data_store, module_store)
             },
-            Self::V2(loader) => loader.verify_modules_for_publication(module_storage, modules),
+            Self::V2(loader) => loader
+                .verify_modules_for_publication(module_storage, modules)
+                .map_err(|e| e.finish(Location::Undefined)),
         }
     }
 
@@ -436,7 +446,9 @@ impl Loader {
     ) -> VMResult<Type> {
         match self {
             Self::V1(loader) => loader.load_type(ty_tag, data_store, module_store),
-            Self::V2(loader) => loader.load_ty(module_storage, ty_tag),
+            Self::V2(loader) => loader
+                .load_ty(module_storage, ty_tag)
+                .map_err(|e| e.finish(Location::Undefined)),
         }
     }
 
@@ -1258,14 +1270,12 @@ impl<'a> Resolver<'a> {
             Loader::V1(_) => self.module_store.function_at(handle),
             Loader::V2(loader) => match handle {
                 FunctionHandle::Local(func) => Ok(func.clone()),
-                FunctionHandle::Remote { module, name } => loader
-                    .load_function_without_ty_args(
-                        self.module_storage,
-                        module.address(),
-                        module.name(),
-                        name.as_ident_str(),
-                    )
-                    .map_err(|e| e.to_partial()),
+                FunctionHandle::Remote { module, name } => loader.load_function_without_ty_args(
+                    self.module_storage,
+                    module.address(),
+                    module.name(),
+                    name.as_ident_str(),
+                ),
             },
         }
     }
@@ -1282,14 +1292,12 @@ impl<'a> Resolver<'a> {
             Loader::V1(_) => self.module_store.function_at(&func_inst.handle),
             Loader::V2(loader) => match &func_inst.handle {
                 FunctionHandle::Local(func) => Ok(func.clone()),
-                FunctionHandle::Remote { module, name } => loader
-                    .load_function_without_ty_args(
-                        self.module_storage,
-                        module.address(),
-                        module.name(),
-                        name.as_ident_str(),
-                    )
-                    .map_err(|e| e.to_partial()),
+                FunctionHandle::Remote { module, name } => loader.load_function_without_ty_args(
+                    self.module_storage,
+                    module.address(),
+                    module.name(),
+                    name.as_ident_str(),
+                ),
             },
         }
     }
@@ -1303,14 +1311,12 @@ impl<'a> Resolver<'a> {
             Loader::V1(_) => self
                 .module_store
                 .resolve_function_by_name(func_name, module_id),
-            Loader::V2(loader) => loader
-                .load_function_without_ty_args(
-                    self.module_storage,
-                    module_id.address(),
-                    module_id.name(),
-                    func_name,
-                )
-                .map_err(|e| e.to_partial()),
+            Loader::V2(loader) => loader.load_function_without_ty_args(
+                self.module_storage,
+                module_id.address(),
+                module_id.name(),
+                func_name,
+            ),
         }
     }
 
@@ -1826,14 +1832,12 @@ impl Loader {
         let struct_type = match self {
             Self::V1(_) => module_store
                 .get_struct_type_by_identifier(&struct_name.name, &struct_name.module)?,
-            Self::V2(loader) => loader
-                .load_struct_ty(
-                    &DummyStorage,
-                    struct_name.module.address(),
-                    struct_name.module.name(),
-                    struct_name.name.as_ident_str(),
-                )
-                .map_err(|e| e.to_partial())?,
+            Self::V2(loader) => loader.load_struct_ty(
+                &DummyStorage,
+                struct_name.module.address(),
+                struct_name.module.name(),
+                struct_name.name.as_ident_str(),
+            )?,
         };
 
         let mut has_identifier_mappings = false;
@@ -2083,14 +2087,12 @@ impl Loader {
         let struct_type = match self {
             Self::V1(_) => module_store
                 .get_struct_type_by_identifier(&struct_name.name, &struct_name.module)?,
-            Self::V2(loader) => loader
-                .load_struct_ty(
-                    &DummyStorage,
-                    struct_name.module.address(),
-                    struct_name.module.name(),
-                    struct_name.name.as_ident_str(),
-                )
-                .map_err(|e| e.to_partial())?,
+            Self::V2(loader) => loader.load_struct_ty(
+                &DummyStorage,
+                struct_name.module.address(),
+                struct_name.module.name(),
+                struct_name.name.as_ident_str(),
+            )?,
         };
 
         // TODO(#13806): have annotated layouts for variants. Currently, we just return the raw
@@ -2227,14 +2229,12 @@ impl Loader {
         let struct_type = match self {
             Self::V1(_) => module_store
                 .get_struct_type_by_identifier(&struct_name.name, &struct_name.module)?,
-            Self::V2(loader) => loader
-                .load_struct_ty(
-                    &DummyStorage,
-                    struct_name.module.address(),
-                    struct_name.module.name(),
-                    struct_name.name.as_ident_str(),
-                )
-                .map_err(|e| e.to_partial())?,
+            Self::V2(loader) => loader.load_struct_ty(
+                &DummyStorage,
+                struct_name.module.address(),
+                struct_name.module.name(),
+                struct_name.name.as_ident_str(),
+            )?,
         };
         let formulas = match &struct_type.layout {
             StructLayout::Single(fields) => fields
