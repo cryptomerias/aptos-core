@@ -597,7 +597,9 @@ impl Interpreter {
             } => {
                 gas_meter.charge_native_function(cost, Option::<std::iter::Empty<&Value>>::None)?;
 
-                // Note(George): V2 loads function directly to avoid this case completely!
+                // Note(George): when V2 loader fetches the function, the defining module is
+                // automatically loaded as well, and there is no need for preloading of a module
+                // into the cache like in V1 design.
                 if let Loader::V1(loader) = resolver.loader() {
                     // Load the module that contains this function regardless of the traversal context.
                     //
