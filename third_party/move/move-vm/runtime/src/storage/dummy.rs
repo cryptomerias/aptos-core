@@ -92,8 +92,11 @@ impl ScriptStorage for DummyStorage {
         unexpected_unimplemented_error!()
     }
 
-    fn fetch_existing_verified_script(&self, _script_hash: &[u8; 32]) -> Arc<Script> {
-        unimplemented!()
+    fn fetch_existing_verified_script(
+        &self,
+        _script_hash: &[u8; 32],
+    ) -> PartialVMResult<Arc<Script>> {
+        unexpected_unimplemented_error!()
     }
 }
 

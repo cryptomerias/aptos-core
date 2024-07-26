@@ -192,22 +192,36 @@ impl Function {
         module_store: &'a ModuleStorageAdapter,
         module_storage: &'a impl ModuleStorage,
         script_storage: &'a impl ScriptStorage,
-    ) -> Resolver<'a> {
+    ) -> PartialVMResult<Resolver<'a>> {
         match &self.scope {
             Scope::Module(module_id) => {
                 let module = match loader {
-                    Loader::V1(_) => module_store
-                        .module_at(module_id)
-                        .expect("ModuleId on Function must exist"),
-                    Loader::V2(loader) => loader
-                        .load_module(module_storage, module_id.address(), module_id.name())
-                        .expect("ModuleId on Function must exist"),
+                    Loader::V1(_) => module_store.module_at(module_id).ok_or_else(|| {
+                        PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                            .with_message(format!(
+                                "Module {} does not exist in cache but it should",
+                                module_id
+                            ))
+                    })?,
+                    Loader::V2(loader) => {
+                        loader.load_module(module_storage, module_id.address(), module_id.name())?
+                    },
                 };
-                Resolver::for_module(loader, module_store, module, module_storage)
+                Ok(Resolver::for_module(
+                    loader,
+                    module_store,
+                    module,
+                    module_storage,
+                ))
             },
             Scope::Script(script_hash) => {
-                let script = loader.get_script(script_hash, script_storage);
-                Resolver::for_script(loader, module_store, script, module_storage)
+                let script = loader.get_existing_script(script_hash, script_storage)?;
+                Ok(Resolver::for_script(
+                    loader,
+                    module_store,
+                    script,
+                    module_storage,
+                ))
             },
         }
     }

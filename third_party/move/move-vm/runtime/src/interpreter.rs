@@ -161,8 +161,9 @@ impl Interpreter {
             .enter_function(&current_frame, current_frame.function.as_ref())
             .map_err(|e| self.set_location(e))?;
         loop {
-            let resolver =
-                current_frame.resolver(loader, module_store, module_storage, script_storage);
+            let resolver = current_frame
+                .resolver(loader, module_store, module_storage, script_storage)
+                .map_err(|e| e.finish(Location::Undefined))?;
             let exit_code = current_frame //self
                 .execute_code(
                     &resolver,
@@ -3275,7 +3276,7 @@ impl Frame {
         module_store: &'a ModuleStorageAdapter,
         module_storage: &'a impl ModuleStorage,
         script_storage: &'a impl ScriptStorage,
-    ) -> Resolver<'a> {
+    ) -> PartialVMResult<Resolver<'a>> {
         self.function
             .get_resolver(loader, module_store, module_storage, script_storage)
     }

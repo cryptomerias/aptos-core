@@ -486,16 +486,22 @@ impl Loader {
         }
     }
 
-    fn get_script(&self, hash: &ScriptHash, script_storage: &impl ScriptStorage) -> Arc<Script> {
+    fn get_existing_script(
+        &self,
+        hash: &ScriptHash,
+        script_storage: &impl ScriptStorage,
+    ) -> PartialVMResult<Arc<Script>> {
         match self {
-            Self::V1(loader) => Arc::clone(
-                loader
-                    .scripts
-                    .read()
-                    .scripts
-                    .get(hash)
-                    .expect("Script hash on Function must exist"),
-            ),
+            Self::V1(loader) => loader
+                .scripts
+                .read()
+                .scripts
+                .get(hash)
+                .cloned()
+                .ok_or_else(|| {
+                    PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                        .with_message(format!("Script for {:?} does not exist in cache", hash))
+                }),
             Self::V2(_) => script_storage.fetch_existing_verified_script(hash),
         }
     }
