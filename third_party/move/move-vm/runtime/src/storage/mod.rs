@@ -1,7 +1,6 @@
 // Copyright (c) The Move Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-mod builders;
 pub(crate) mod loader;
 pub(crate) mod struct_name_index_map;
 

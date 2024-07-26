@@ -3,10 +3,9 @@
 
 use crate::{
     config::VMConfig,
-    loader::{Function, Module, TypeCache},
+    loader::{Function, Module, Script, TypeCache},
     module_traversal::TraversalContext,
     storage::{
-        builders::{build_module, build_script},
         module_storage::ModuleStorage,
         script_storage::{script_hash, ScriptStorage},
         struct_name_index_map::StructNameIndexMap,
@@ -16,7 +15,8 @@ use crate::{
 };
 use move_binary_format::{
     access::{ModuleAccess, ScriptAccess},
-    errors::{Location, PartialVMError, VMResult},
+    errors::{Location, PartialVMError, PartialVMResult, VMResult},
+    file_format::CompiledScript,
     CompiledModule,
 };
 use move_core_types::{
@@ -147,9 +147,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         let script_hash = script_hash(serialized_script);
         let main = script_storage
             .fetch_or_create_verified_script(serialized_script, &|cs| {
-                build_script(
-                    &self.struct_name_index_map,
-                    &self.verifier,
+                self.build_script(
                     module_storage,
                     cs,
                     // TODO(George): We re-calculate the script hash because function
@@ -187,12 +185,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
     ) -> VMResult<Arc<Module>> {
         module_storage
             .fetch_or_create_verified_module(address, module_name, &|cm| {
-                build_module(
-                    &self.struct_name_index_map,
-                    &self.verifier,
-                    module_storage,
-                    cm,
-                )
+                self.build_module(module_storage, cm)
             })
             .map_err(|e| {
                 e.finish(Location::Module(ModuleId::new(
@@ -278,6 +271,59 @@ impl<V: Clone + Verifier> LoaderV2<V> {
 
     pub(crate) fn ty_builder(&self) -> &TypeBuilder {
         &self.vm_config.ty_builder
+    }
+
+    /// Given loader's context, builds a new verified script instance.
+    fn build_script(
+        &self,
+        module_storage: &dyn ModuleStorage,
+        compiled_script: Arc<CompiledScript>,
+        script_hash: [u8; 32],
+    ) -> PartialVMResult<Script> {
+        // Verify local properties of the script.
+        self.verifier.verify_script(compiled_script.as_ref())?;
+
+        // Fetch all dependencies of this script, and verify them as well.
+        let imm_dependencies = compiled_script
+            .immediate_dependencies_iter()
+            .map(|(addr, name)| {
+                module_storage.fetch_or_create_verified_module(addr, name, &|cm| {
+                    self.build_module(module_storage, cm)
+                })
+            })
+            .collect::<PartialVMResult<Vec<_>>>()?;
+
+        // Perform checks on script and its dependencies.
+        self.verifier.verify_script_with_dependencies(
+            compiled_script.as_ref(),
+            imm_dependencies.iter().map(|m| m.as_ref()),
+        )?;
+
+        Script::new_v2(module_storage, compiled_script, script_hash)
+    }
+
+    /// Given loader's context, builds a new verified module instance.
+    fn build_module(
+        &self,
+        module_storage: &dyn ModuleStorage,
+        compiled_module: Arc<CompiledModule>,
+    ) -> PartialVMResult<Module> {
+        // Verify local properties of the module.
+        self.verifier.verify_module(compiled_module.as_ref())?;
+
+        // Fetch all dependencies of this module, ensuring they are verified as well.
+        let f = |cm| self.build_module(module_storage, cm);
+        let imm_dependencies = compiled_module
+            .immediate_dependencies_iter()
+            .map(|(addr, name)| module_storage.fetch_or_create_verified_module(addr, name, &f))
+            .collect::<PartialVMResult<Vec<_>>>()?;
+
+        // Perform checks on the module with its immediate dependencies.
+        self.verifier.verify_module_with_dependencies(
+            compiled_module.as_ref(),
+            imm_dependencies.iter().map(|m| m.as_ref()),
+        )?;
+        Module::new_v2(module_storage, compiled_module)
     }
 }
 
