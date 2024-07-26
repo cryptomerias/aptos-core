@@ -301,7 +301,7 @@ impl ExecutionPipeline {
                 monitor!(
                     "pre_commit",
                     tokio::task::spawn_blocking(move || {
-                        executor.pre_commit(block_id, parent_block_id)
+                        executor.pre_commit_block(block_id, parent_block_id)
                     })
                 )
                 .await

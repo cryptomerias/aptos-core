@@ -19,6 +19,7 @@ use aptos_types::{
     transaction::{SignedTransaction, TransactionStatus},
     validator_txn::ValidatorTransaction,
 };
+use derivative::Derivative;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -31,7 +32,8 @@ use tokio::sync::oneshot;
 /// A representation of a block that has been added to the execution pipeline. It might either be in ordered
 /// or in executed state. In the ordered state, the block is waiting to be executed. In the executed state,
 /// the block has been executed and the output is available.
-#[derive(Clone)]
+#[derive(Derivative, Clone)]
+#[derivative(Eq, PartialEq)]
 pub struct PipelinedBlock {
     /// Block data that cannot be regenerated.
     block: Block,
@@ -44,6 +46,7 @@ pub struct PipelinedBlock {
     randomness: OnceCell<Randomness>,
     pipeline_insertion_time: OnceCell<Instant>,
     execution_summary: Arc<OnceCell<ExecutionSummary>>,
+    #[derivative(PartialEq = "ignore")]
     pre_commit_result_rx: Arc<Mutex<Option<oneshot::Receiver<ExecutorResult<()>>>>>,
 }
 
