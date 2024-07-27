@@ -236,7 +236,7 @@ impl Loader {
         visited: &mut BTreeMap<(&'a AccountAddress, &'a IdentStr), ()>,
         referenced_modules: &'a Arena<Arc<CompiledModule>>,
         ids: I,
-        module_storage: &impl ModuleStorageV2,
+        module_storage: &dyn ModuleStorageV2,
     ) -> VMResult<()>
     where
         I: IntoIterator<Item = (&'a AccountAddress, &'a IdentStr)>,

@@ -99,7 +99,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
     //               to make the code more concise.
     pub(crate) fn check_dependencies_and_charge_gas<'a, I>(
         &self,
-        module_storage: &impl ModuleStorage,
+        module_storage: &dyn ModuleStorage,
         gas_meter: &mut impl GasMeter,
         visited: &mut BTreeMap<(&'a AccountAddress, &'a IdentStr), ()>,
         referenced_modules: &'a Arena<Arc<CompiledModule>>,

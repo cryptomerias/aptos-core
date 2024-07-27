@@ -134,7 +134,7 @@ impl<'a, 'b, 'c> NativeContext<'a, 'b, 'c> {
     pub fn exists_at(
         &mut self,
         address: AccountAddress,
-        type_: &Type,
+        ty: &Type,
     ) -> VMResult<(bool, Option<NumBytes>)> {
         let (value, num_bytes) = self
             .data_store
@@ -142,7 +142,7 @@ impl<'a, 'b, 'c> NativeContext<'a, 'b, 'c> {
                 self.resolver.loader(),
                 self.resolver.module_storage(),
                 address,
-                type_,
+                ty,
                 self.resolver.module_store(),
             )
             .map_err(|err| err.finish(Location::Undefined))?;
