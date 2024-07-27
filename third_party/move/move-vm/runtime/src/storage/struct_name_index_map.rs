@@ -47,3 +47,51 @@ impl Clone for StructNameIndexMap {
         Self(RwLock::new(self.0.read().clone()))
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use move_core_types::{
+        account_address::AccountAddress, identifier::Identifier, language_storage::ModuleId,
+    };
+
+    fn make_struct_name(module_name: &str, struct_name: &str) -> StructIdentifier {
+        let module = ModuleId::new(AccountAddress::ONE, Identifier::new(module_name).unwrap());
+        let name = Identifier::new(struct_name).unwrap();
+        StructIdentifier { module, name }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_index_map_must_contain_idx() {
+        let struct_name_idx_map = StructNameIndexMap::empty();
+        let _ = struct_name_idx_map.idx_to_struct_name(StructNameIndex(0));
+    }
+
+    #[test]
+    fn test_index_map() {
+        let struct_name_idx_map = StructNameIndexMap::empty();
+
+        // First-time access.
+
+        let foo = make_struct_name("foo", "Foo");
+        let foo_idx = struct_name_idx_map.struct_name_to_idx(foo.clone());
+        assert_eq!(foo_idx.0, 0);
+
+        let bar = make_struct_name("bar", "Bar");
+        let bar_idx = struct_name_idx_map.struct_name_to_idx(bar.clone());
+        assert_eq!(bar_idx.0, 1);
+
+        // Check that struct names actually correspond to indices.
+        let returned_foo = &*struct_name_idx_map.idx_to_struct_name(foo_idx);
+        assert_eq!(returned_foo, &foo);
+        let returned_bar = &*struct_name_idx_map.idx_to_struct_name(bar_idx);
+        assert_eq!(returned_bar, &bar);
+
+        // Re-check indices on second access.
+        let foo_idx = struct_name_idx_map.struct_name_to_idx(foo);
+        assert_eq!(foo_idx.0, 0);
+        let bar_idx = struct_name_idx_map.struct_name_to_idx(bar);
+        assert_eq!(bar_idx.0, 1);
+    }
+}
