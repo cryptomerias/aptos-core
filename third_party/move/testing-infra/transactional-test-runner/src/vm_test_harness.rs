@@ -42,6 +42,7 @@ use move_vm_runtime::{
     module_traversal::*,
     move_vm::MoveVM,
     session::{SerializedReturnValues, Session},
+    DummyStorage,
 };
 use move_vm_test_utils::{
     gas_schedule::{CostTable, Gas, GasStatus},
@@ -272,6 +273,8 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
                 args,
                 gas_status,
                 &mut TraversalContext::new(&traversal_storage),
+                &DummyStorage,
+                &DummyStorage,
             )
         })
         .map_err(|vm_error| {
@@ -323,6 +326,7 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
                     args,
                     gas_status,
                     &mut TraversalContext::new(&traversal_storage),
+                    &DummyStorage,
                 )
             })
             .map_err(|vm_error| {

@@ -105,6 +105,7 @@ use move_core_types::{
 use move_vm_runtime::{
     logging::expect_no_verification_errors,
     module_traversal::{TraversalContext, TraversalStorage},
+    DummyStorage,
 };
 use move_vm_types::gas::{GasMeter, UnmeteredGasMeter};
 use num_cpus;
@@ -730,13 +731,20 @@ impl AptosVM {
         //       the error semantics.
         if self.gas_feature_version >= 15 {
             session.check_script_dependencies_and_check_gas(
+                &DummyStorage,
+                &DummyStorage,
                 gas_meter,
                 traversal_context,
                 script.code(),
             )?;
         }
 
-        let func = session.load_script(script.code(), script.ty_args())?;
+        let func = session.load_script(
+            &DummyStorage,
+            &DummyStorage,
+            script.code(),
+            script.ty_args(),
+        )?;
 
         // TODO(Gerardo): consolidate the extended validation to verifier.
         verifier::event_validation::verify_no_event_emission_in_script(
@@ -758,6 +766,8 @@ impl AptosVM {
             args,
             gas_meter,
             traversal_context,
+            &DummyStorage,
+            &DummyStorage,
         )?;
         Ok(())
     }
@@ -779,14 +789,20 @@ impl AptosVM {
             let module_id = traversal_context
                 .referenced_module_ids
                 .alloc(entry_fn.module().clone());
-            session.check_dependencies_and_charge_gas(gas_meter, traversal_context, [(
-                module_id.address(),
-                module_id.name(),
-            )])?;
+            session.check_dependencies_and_charge_gas(
+                &DummyStorage,
+                gas_meter,
+                traversal_context,
+                [(module_id.address(), module_id.name())],
+            )?;
         }
 
-        let function =
-            session.load_function(entry_fn.module(), entry_fn.function(), entry_fn.ty_args())?;
+        let function = session.load_function(
+            &DummyStorage,
+            entry_fn.module(),
+            entry_fn.function(),
+            entry_fn.ty_args(),
+        )?;
 
         // Native entry function is forbidden.
         if self
@@ -823,7 +839,13 @@ impl AptosVM {
             &function,
             struct_constructors_enabled,
         )?;
-        session.execute_entry_function(function, args, gas_meter, traversal_context)?;
+        session.execute_entry_function(
+            function,
+            args,
+            gas_meter,
+            traversal_context,
+            &DummyStorage,
+        )?;
         Ok(())
     }
 
@@ -1083,6 +1105,7 @@ impl AptosVM {
                     ]),
                     gas_meter,
                     traversal_context,
+                    &DummyStorage,
                 )
             })?
             .return_values
@@ -1181,6 +1204,7 @@ impl AptosVM {
                             cleanup_args,
                             &mut UnmeteredGasMeter,
                             traversal_context,
+                            &DummyStorage,
                         )
                         .map_err(|e| e.into_vm_status())
                 })?;
@@ -1313,6 +1337,7 @@ impl AptosVM {
                     cleanup_args,
                     &mut UnmeteredGasMeter,
                     traversal_context,
+                    &DummyStorage,
                 )
                 .map_err(|e| e.into_vm_status())
         })?;
@@ -1337,7 +1362,8 @@ impl AptosVM {
                 continue;
             }
             *new_published_modules_loaded = true;
-            let init_function = session.load_function(&module.self_id(), init_func_name, &[]);
+            let init_function =
+                session.load_function(&DummyStorage, &module.self_id(), init_func_name, &[]);
             // it is ok to not have init_module function
             // init_module function should be (1) private and (2) has no return value
             // Note that for historic reasons, verification here is treated
@@ -1356,6 +1382,7 @@ impl AptosVM {
                         args,
                         gas_meter,
                         traversal_context,
+                        &DummyStorage,
                     )?;
                 } else {
                     return Err(PartialVMError::new(StatusCode::CONSTRAINT_NOT_SATISFIED)
@@ -1467,6 +1494,7 @@ impl AptosVM {
                         .collect::<BTreeSet<_>>();
 
                     session.check_dependencies_and_charge_gas(
+                        &DummyStorage,
                         gas_meter,
                         traversal_context,
                         modules
@@ -2095,6 +2123,7 @@ impl AptosVM {
                 args,
                 &mut gas_meter,
                 &mut TraversalContext::new(&storage),
+                &DummyStorage,
             )
             .map(|_return_vals| ())
             .or_else(|e| {
@@ -2174,6 +2203,7 @@ impl AptosVM {
                 serialize_values(&args),
                 &mut gas_meter,
                 &mut TraversalContext::new(&storage),
+                &DummyStorage,
             )
             .map(|_return_vals| ())
             .or_else(|e| {
@@ -2264,7 +2294,7 @@ impl AptosVM {
         arguments: Vec<Vec<u8>>,
         gas_meter: &mut impl AptosGasMeter,
     ) -> anyhow::Result<Vec<Vec<u8>>> {
-        let func = session.load_function(&module_id, &func_name, &type_args)?;
+        let func = session.load_function(&DummyStorage, &module_id, &func_name, &type_args)?;
         let metadata = vm.extract_module_metadata(&module_id);
         let arguments = verifier::view_function::validate_view_function(
             session,
@@ -2285,6 +2315,7 @@ impl AptosVM {
                 arguments,
                 gas_meter,
                 &mut TraversalContext::new(&storage),
+                &DummyStorage,
             )
             .map_err(|err| anyhow!("Failed to execute function: {:?}", err))?
             .return_values
@@ -2725,6 +2756,7 @@ fn create_account_if_does_not_exist(
             serialize_values(&vec![MoveValue::Address(account)]),
             gas_meter,
             traversal_context,
+            &DummyStorage,
         )
         .map(|_return_vals| ())
 }

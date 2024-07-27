@@ -7,7 +7,7 @@ use move_binary_format::{
     file_format_common::{IDENTIFIER_SIZE_MAX, VERSION_MAX},
 };
 use move_core_types::{account_address::AccountAddress, vm_status::StatusCode};
-use move_vm_runtime::{config::VMConfig, module_traversal::*, move_vm::MoveVM};
+use move_vm_runtime::{config::VMConfig, module_traversal::*, move_vm::MoveVM, DummyStorage};
 use move_vm_test_utils::InMemoryStorage;
 use move_vm_types::gas::UnmeteredGasMeter;
 
@@ -110,6 +110,8 @@ fn test_run_script_with_custom_max_binary_format_version() {
             args.clone(),
             &mut UnmeteredGasMeter,
             &mut TraversalContext::new(&traversal_storage),
+            &DummyStorage,
+            &DummyStorage,
         )
         .unwrap();
 
@@ -119,6 +121,8 @@ fn test_run_script_with_custom_max_binary_format_version() {
             args,
             &mut UnmeteredGasMeter,
             &mut TraversalContext::new(&traversal_storage),
+            &DummyStorage,
+            &DummyStorage,
         )
         .unwrap();
     }
@@ -148,7 +152,9 @@ fn test_run_script_with_custom_max_binary_format_version() {
                 vec![],
                 args.clone(),
                 &mut UnmeteredGasMeter,
-                &mut TraversalContext::new(&traversal_storage)
+                &mut TraversalContext::new(&traversal_storage),
+                &DummyStorage,
+                &DummyStorage,
             )
             .unwrap_err()
             .major_status(),
@@ -161,6 +167,8 @@ fn test_run_script_with_custom_max_binary_format_version() {
             args,
             &mut UnmeteredGasMeter,
             &mut TraversalContext::new(&traversal_storage),
+            &DummyStorage,
+            &DummyStorage,
         )
         .unwrap();
     }

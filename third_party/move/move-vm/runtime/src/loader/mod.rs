@@ -145,6 +145,10 @@ impl Loader {
         })
     }
 
+    pub(crate) fn is_v1(&self) -> bool {
+        matches!(self, Self::V1(_))
+    }
+
     pub(crate) fn vm_config(&self) -> &VMConfig {
         match self {
             Self::V1(loader) => loader.vm_config(),

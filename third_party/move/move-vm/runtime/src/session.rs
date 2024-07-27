@@ -10,6 +10,7 @@ use crate::{
     move_vm::MoveVM,
     native_extensions::NativeContextExtensions,
     storage::{dummy::DummyStorage, module_storage::ModuleStorage},
+    ScriptStorage,
 };
 use bytes::Bytes;
 use move_binary_format::{compatibility::Compatibility, errors::*, file_format::LocalIndex};
@@ -61,6 +62,7 @@ impl<'r, 'l> Session<'r, 'l> {
         args: Vec<impl Borrow<[u8]>>,
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext,
+        module_storage: &impl ModuleStorage,
     ) -> VMResult<()> {
         if !func.is_entry() {
             return Err(PartialVMError::new(
@@ -80,7 +82,11 @@ impl<'r, 'l> Session<'r, 'l> {
             gas_meter,
             traversal_context,
             &mut self.native_extensions,
-            &DummyStorage,
+            module_storage,
+            // TODO(George): Should not be used anyway, refactor code so that loaded
+            //               function knows its scope? Although we load a function only
+            //               to verify arguments so the problem should go away because we
+            //               will not expose it.
             &DummyStorage,
         )?;
         Ok(())
@@ -95,6 +101,7 @@ impl<'r, 'l> Session<'r, 'l> {
         args: Vec<impl Borrow<[u8]>>,
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext,
+        module_storage: &impl ModuleStorage,
     ) -> VMResult<SerializedReturnValues> {
         let func = self.move_vm.runtime.loader().load_function(
             module,
@@ -102,7 +109,7 @@ impl<'r, 'l> Session<'r, 'l> {
             &ty_args,
             &mut self.data_cache,
             &self.module_store,
-            &DummyStorage,
+            module_storage,
         )?;
 
         self.move_vm.runtime.execute_function_instantiation(
@@ -113,7 +120,8 @@ impl<'r, 'l> Session<'r, 'l> {
             gas_meter,
             traversal_context,
             &mut self.native_extensions,
-            &DummyStorage,
+            module_storage,
+            // TODO(George): Add scope to loaded function.
             &DummyStorage,
         )
     }
@@ -124,6 +132,7 @@ impl<'r, 'l> Session<'r, 'l> {
         args: Vec<impl Borrow<[u8]>>,
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext,
+        module_storage: &impl ModuleStorage,
     ) -> VMResult<SerializedReturnValues> {
         self.move_vm.runtime.execute_function_instantiation(
             func,
@@ -133,7 +142,8 @@ impl<'r, 'l> Session<'r, 'l> {
             gas_meter,
             traversal_context,
             &mut self.native_extensions,
-            &DummyStorage,
+            module_storage,
+            // TODO(George): Add scope to loaded function!
             &DummyStorage,
         )
     }
@@ -161,6 +171,8 @@ impl<'r, 'l> Session<'r, 'l> {
         args: Vec<impl Borrow<[u8]>>,
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext,
+        module_storage: &impl ModuleStorage,
+        script_storage: &impl ScriptStorage,
     ) -> VMResult<()> {
         self.move_vm.runtime.execute_script(
             script,
@@ -171,8 +183,8 @@ impl<'r, 'l> Session<'r, 'l> {
             gas_meter,
             traversal_context,
             &mut self.native_extensions,
-            &DummyStorage,
-            &DummyStorage,
+            module_storage,
+            script_storage,
         )
     }
 
@@ -335,11 +347,15 @@ impl<'r, 'l> Session<'r, 'l> {
         )
     }
 
-    /// Get the serialized format of a `CompiledModule` given a `ModuleId`.
-    pub fn load_module(&self, module_id: &ModuleId) -> VMResult<Bytes> {
+    /// DO NOT USE THIS API!
+    ///
+    /// It is only used to extract metadata from a module, which in loader V2 design will be done
+    /// via ModuleStorage directly.
+    #[deprecated]
+    pub fn fetch_module_from_data_store(&self, module_id: &ModuleId) -> VMResult<Bytes> {
         // TODO: This function should be removed...
         self.data_cache
-            .load_module(module_id)
+            .fetch_module(module_id)
             .map_err(|e| e.finish(Location::Undefined))
     }
 
@@ -351,6 +367,8 @@ impl<'r, 'l> Session<'r, 'l> {
     /// Load a script and all of its types into cache
     pub fn load_script(
         &mut self,
+        module_storage: &impl ModuleStorage,
+        script_storage: &impl ScriptStorage,
         script: impl Borrow<[u8]>,
         ty_args: &[TypeTag],
     ) -> VMResult<LoadedFunction> {
@@ -359,14 +377,15 @@ impl<'r, 'l> Session<'r, 'l> {
             ty_args,
             &mut self.data_cache,
             &self.module_store,
-            &DummyStorage,
-            &DummyStorage,
+            module_storage,
+            script_storage,
         )
     }
 
     /// Load a module, a function, and all of its types into cache
     pub fn load_function_with_type_arg_inference(
         &mut self,
+        module_storage: &impl ModuleStorage,
         module_id: &ModuleId,
         function_name: &IdentStr,
         expected_return_type: &Type,
@@ -380,13 +399,14 @@ impl<'r, 'l> Session<'r, 'l> {
                 expected_return_type,
                 &mut self.data_cache,
                 &self.module_store,
-                &DummyStorage,
+                module_storage,
             )
     }
 
     /// Load a module, a function, and all of its types into cache
     pub fn load_function(
         &mut self,
+        module_storage: &impl ModuleStorage,
         module_id: &ModuleId,
         function_name: &IdentStr,
         ty_args: &[TypeTag],
@@ -397,16 +417,20 @@ impl<'r, 'l> Session<'r, 'l> {
             ty_args,
             &mut self.data_cache,
             &self.module_store,
-            &DummyStorage,
+            module_storage,
         )
     }
 
-    pub fn load_type(&mut self, type_tag: &TypeTag) -> VMResult<Type> {
+    pub fn load_type(
+        &mut self,
+        type_tag: &TypeTag,
+        module_storage: &impl ModuleStorage,
+    ) -> VMResult<Type> {
         self.move_vm.runtime.loader().load_type(
             type_tag,
             &mut self.data_cache,
             &self.module_store,
-            &DummyStorage,
+            module_storage,
         )
     }
 
@@ -464,16 +488,21 @@ impl<'r, 'l> Session<'r, 'l> {
         self.move_vm.runtime.loader().ty_builder()
     }
 
-    pub fn get_struct_type(&self, idx: StructNameIndex) -> Option<Arc<StructType>> {
+    pub fn fetch_struct_ty(
+        &self,
+        idx: StructNameIndex,
+        module_storage: &impl ModuleStorage,
+    ) -> Option<Arc<StructType>> {
         self.move_vm
             .runtime
             .loader()
-            .get_struct_type(idx, &self.module_store, &DummyStorage)
+            .get_struct_type(idx, &self.module_store, module_storage)
             .ok()
     }
 
     pub fn check_dependencies_and_charge_gas<'a, I>(
         &mut self,
+        module_storage: &impl ModuleStorage,
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext<'a>,
         ids: I,
@@ -492,12 +521,14 @@ impl<'r, 'l> Session<'r, 'l> {
                 &mut traversal_context.visited,
                 traversal_context.referenced_modules,
                 ids,
-                &DummyStorage,
+                module_storage,
             )
     }
 
     pub fn check_script_dependencies_and_check_gas(
         &mut self,
+        module_storage: &impl ModuleStorage,
+        script_storage: &impl ScriptStorage,
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext,
         script: impl Borrow<[u8]>,
@@ -511,8 +542,8 @@ impl<'r, 'l> Session<'r, 'l> {
                 gas_meter,
                 traversal_context,
                 script.borrow(),
-                &DummyStorage,
-                &DummyStorage,
+                module_storage,
+                script_storage,
             )
     }
 }

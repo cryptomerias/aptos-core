@@ -183,7 +183,7 @@ impl<'r, 'l> AsyncSession<'r, 'l> {
         let state_type_tag = TypeTag::Struct(Box::new(actor.state_tag.clone()));
         let state_type = self
             .vm_session
-            .load_type(&state_type_tag)
+            .load_type(&state_type_tag, &DummyStorage)
             .map_err(vm_error_to_async)?;
 
         // Check whether the actor state already exists.
@@ -212,6 +212,7 @@ impl<'r, 'l> AsyncSession<'r, 'l> {
                 Vec::<Vec<u8>>::new(),
                 gas_status,
                 &mut TraversalContext::new(&traversal_storage),
+                &DummyStorage,
             )
             .and_then(|ret| Ok((ret, self.vm_session.finish_with_extensions()?)));
         let gas_used = gas_before.checked_sub(gas_status.remaining_gas()).unwrap();
@@ -279,7 +280,7 @@ impl<'r, 'l> AsyncSession<'r, 'l> {
         let state_type_tag = TypeTag::Struct(Box::new(actor.state_tag.clone()));
         let state_type = self
             .vm_session
-            .load_type(&state_type_tag)
+            .load_type(&state_type_tag, &DummyStorage)
             .map_err(vm_error_to_async)?;
 
         let actor_state_global = self
@@ -310,6 +311,7 @@ impl<'r, 'l> AsyncSession<'r, 'l> {
                 args,
                 gas_status,
                 &mut TraversalContext::new(&traversal_storage),
+                &DummyStorage,
             )
             .and_then(|ret| Ok((ret, self.vm_session.finish_with_extensions()?)));
 

@@ -51,7 +51,7 @@ impl AccountDataCache {
     }
 }
 
-fn load_module_impl(
+fn fetch_module_impl(
     remote: &dyn MoveResolver,
     account_map: &BTreeMap<AccountAddress, AccountDataCache>,
     module_id: &ModuleId,
@@ -299,8 +299,8 @@ impl<'r> TransactionDataCache<'r> {
         ))
     }
 
-    pub(crate) fn load_module(&self, module_id: &ModuleId) -> PartialVMResult<Bytes> {
-        load_module_impl(self.remote, &self.account_map, module_id)
+    pub(crate) fn fetch_module(&self, module_id: &ModuleId) -> PartialVMResult<Bytes> {
+        fetch_module_impl(self.remote, &self.account_map, module_id)
     }
 
     pub(crate) fn load_compiled_script_to_cache(
@@ -339,7 +339,7 @@ impl<'r> TransactionDataCache<'r> {
             btree_map::Entry::Occupied(entry) => Ok(entry.get().clone()),
             btree_map::Entry::Vacant(entry) => {
                 // bytes fetching, allow loading to fail if the flag is set
-                let bytes = match load_module_impl(self.remote, &self.account_map, entry.key())
+                let bytes = match fetch_module_impl(self.remote, &self.account_map, entry.key())
                     .map_err(|err| err.finish(Location::Undefined))
                 {
                     Ok(bytes) => bytes,

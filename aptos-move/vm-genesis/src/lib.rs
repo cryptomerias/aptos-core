@@ -49,7 +49,10 @@ use move_core_types::{
     language_storage::{ModuleId, TypeTag},
     value::{serialize_values, MoveTypeLayout, MoveValue},
 };
-use move_vm_runtime::module_traversal::{TraversalContext, TraversalStorage};
+use move_vm_runtime::{
+    module_traversal::{TraversalContext, TraversalStorage},
+    DummyStorage,
+};
 use move_vm_types::gas::UnmeteredGasMeter;
 use once_cell::sync::Lazy;
 use rand::prelude::*;
@@ -382,6 +385,7 @@ fn exec_function(
             args,
             &mut UnmeteredGasMeter,
             &mut TraversalContext::new(&storage),
+            &DummyStorage,
         )
         .unwrap_or_else(|e| {
             panic!(

@@ -4,7 +4,7 @@
 use crate::compiler::{as_module, as_script, compile_units};
 use move_bytecode_verifier::VerifierConfig;
 use move_core_types::account_address::AccountAddress;
-use move_vm_runtime::{config::VMConfig, module_traversal::*, move_vm::MoveVM};
+use move_vm_runtime::{config::VMConfig, module_traversal::*, move_vm::MoveVM, DummyStorage};
 use move_vm_test_utils::InMemoryStorage;
 use move_vm_types::gas::UnmeteredGasMeter;
 
@@ -131,6 +131,8 @@ fn test_run_script_with_nested_loops() {
             args,
             &mut UnmeteredGasMeter,
             &mut TraversalContext::new(&traversal_storage),
+            &DummyStorage,
+            &DummyStorage,
         )
         .unwrap();
     }
@@ -160,6 +162,8 @@ fn test_run_script_with_nested_loops() {
             args,
             &mut UnmeteredGasMeter,
             &mut TraversalContext::new(&traversal_storage),
+            &DummyStorage,
+            &DummyStorage,
         )
         .unwrap_err();
     }
