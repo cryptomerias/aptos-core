@@ -50,7 +50,6 @@ pub(crate) struct LoaderV2<V: Clone + Verifier> {
     // All registered native functions the loader is aware of. When loaded modules
     // are constructed, existing native functions are inlined in the loaded module
     // representation, so that the interpreter can call them directly.
-    #[allow(dead_code)]
     natives: NativeFunctions,
 
     // Local caches:
@@ -346,6 +345,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         };
 
         // TODO(George): While we do not need size anymore, fetch the correct value just in case.
+        //               Once V1 API is no longer used, we can remove this.
         let size = module_storage
             .fetch_module_size_in_bytes(compiled_module.self_addr(), compiled_module.self_name())?;
         Module::new(

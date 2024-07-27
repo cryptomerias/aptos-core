@@ -51,10 +51,12 @@ mod modules;
 mod script;
 mod type_loader;
 
-use crate::storage::{
-    dummy::DummyVerifier, loader::LoaderV2, script_storage::ScriptStorage,
-    struct_name_index_map::StructNameIndexMap,
-    modules::{StructVariantInfo, VariantFieldInfo},
+use crate::{
+    loader::modules::{StructVariantInfo, VariantFieldInfo},
+    storage::{
+        dummy::DummyVerifier, loader::LoaderV2, script_storage::ScriptStorage,
+        struct_name_index_map::StructNameIndexMap, struct_type_storage::LoaderV1StructTypeStorage,
+    },
 };
 pub use function::LoadedFunction;
 pub(crate) use function::{Function, FunctionHandle, FunctionInstantiation, Scope};
@@ -1876,7 +1878,15 @@ impl Loader {
                     Vec<bool>,
                 ) = field_tys
                     .iter()
-                    .map(|ty| self.type_to_type_layout_impl(ty, module_store, count, depth))
+                    .map(|ty| {
+                        self.type_to_type_layout_impl(
+                            ty,
+                            module_store,
+                            module_storage,
+                            count,
+                            depth,
+                        )
+                    })
                     .collect::<PartialVMResult<Vec<_>>>()?
                     .into_iter()
                     .unzip();
@@ -1912,8 +1922,13 @@ impl Loader {
                             .iter()
                             .map(|(_, ty)| {
                                 let ty = self.ty_builder().create_ty_with_subst(ty, ty_args)?;
-                                let (ty, has_id_mappings) =
-                                    self.type_to_type_layout_impl(&ty, module_store, count, depth)?;
+                                let (ty, has_id_mappings) = self.type_to_type_layout_impl(
+                                    &ty,
+                                    module_store,
+                                    module_storage,
+                                    count,
+                                    depth,
+                                )?;
                                 has_identifier_mappings |= has_id_mappings;
                                 Ok(ty)
                             })
@@ -2106,7 +2121,14 @@ impl Loader {
         //   layout for them.
         if matches!(struct_type.layout, StructLayout::Variants(_)) {
             return self
-                .struct_name_to_type_layout(struct_idx, module_store, ty_args, count, depth)
+                .struct_name_to_type_layout(
+                    struct_name_idx,
+                    module_store,
+                    module_storage,
+                    ty_args,
+                    count,
+                    depth,
+                )
                 .map(|(l, _)| l);
         }
 
@@ -2117,7 +2139,8 @@ impl Loader {
             cost_base: self.vm_config().type_base_cost,
             cost_per_byte: self.vm_config().type_byte_cost,
         };
-        let struct_tag = self.struct_name_to_type_tag(struct_name_idx, ty_args, &mut gas_context)?;
+        let struct_tag =
+            self.struct_name_to_type_tag(struct_name_idx, ty_args, &mut gas_context)?;
         let fields = struct_type.fields(None)?;
 
         let field_layouts = fields
@@ -2234,12 +2257,16 @@ impl Loader {
         let formulas = match &struct_type.layout {
             StructLayout::Single(fields) => fields
                 .iter()
-                .map(|(_, field_ty)| self.calculate_depth_of_type(field_ty, module_store))
+                .map(|(_, field_ty)| {
+                    self.calculate_depth_of_type(field_ty, module_store, module_storage)
+                })
                 .collect::<PartialVMResult<Vec<_>>>()?,
             StructLayout::Variants(variants) => variants
                 .iter()
                 .flat_map(|variant| variant.1.iter().map(|(_, ty)| ty))
-                .map(|field_ty| self.calculate_depth_of_type(field_ty, module_store))
+                .map(|field_ty| {
+                    self.calculate_depth_of_type(field_ty, module_store, module_storage)
+                })
                 .collect::<PartialVMResult<Vec<_>>>()?,
         };
 
