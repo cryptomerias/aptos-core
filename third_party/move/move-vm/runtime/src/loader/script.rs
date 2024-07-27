@@ -5,8 +5,7 @@ use super::{
     intern_type, BinaryCache, Function, FunctionHandle, FunctionInstantiation, Scope, ScriptHash,
 };
 use crate::storage::{
-    struct_name_index_map::StructNameIndexMap,
-    struct_type_ability_checker::StructTypeAbilityChecker,
+    struct_name_index_map::StructNameIndexMap, struct_type_storage::StructTypeStorage,
 };
 use move_binary_format::{
     access::ScriptAccess,
@@ -46,7 +45,7 @@ impl Script {
     pub(crate) fn new(
         script: Arc<CompiledScript>,
         script_hash: &ScriptHash,
-        struct_ability_checker: &impl StructTypeAbilityChecker,
+        struct_ty_storage: &impl StructTypeStorage,
         struct_name_index_map: &StructNameIndexMap,
     ) -> PartialVMResult<Self> {
         let mut struct_names = vec![];
@@ -55,7 +54,9 @@ impl Script {
             let module_handle = script.module_handle_at(struct_handle.module);
             let module_id = script.module_id_for_handle(module_handle);
 
-            struct_ability_checker.paranoid_check(&module_id, struct_name, struct_handle)?;
+            struct_ty_storage
+                .fetch_struct_ty(&module_id, struct_name)?
+                .check_compatibility(struct_handle)?;
             struct_names.push(struct_name_index_map.struct_name_to_idx(StructIdentifier {
                 module: module_id,
                 name: struct_name.to_owned(),

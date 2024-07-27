@@ -3,7 +3,7 @@
 
 pub(crate) mod loader;
 pub(crate) mod struct_name_index_map;
-pub(crate) mod struct_type_ability_checker;
+pub(crate) mod struct_type_storage;
 
 // Note: these traits should be defined elsewhere, along with Script and Module types.
 //       We keep them here for now so that it is easier to land new changes.

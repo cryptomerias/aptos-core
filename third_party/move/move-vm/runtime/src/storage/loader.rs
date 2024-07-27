@@ -10,7 +10,7 @@ use crate::{
         module_storage::ModuleStorage,
         script_storage::{script_hash, ScriptStorage},
         struct_name_index_map::StructNameIndexMap,
-        struct_type_ability_checker::LoaderV2StructTypeAbilityChecker,
+        struct_type_storage::LoaderV2StructTypeStorage,
         verifier::Verifier,
     },
     unexpected_unimplemented_error, LoadedFunction,
@@ -306,14 +306,14 @@ impl<V: Clone + Verifier> LoaderV2<V> {
             imm_dependencies.iter().map(|m| m.as_ref()),
         )?;
 
-        let checker = LoaderV2StructTypeAbilityChecker {
+        let struct_ty_storage = LoaderV2StructTypeStorage {
             loader: self,
             module_storage,
         };
         Script::new(
             compiled_script,
             &script_hash,
-            &checker,
+            &struct_ty_storage,
             &self.struct_name_index_map,
         )
     }
@@ -340,7 +340,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
             imm_dependencies.iter().map(|m| m.as_ref()),
         )?;
 
-        let checker = LoaderV2StructTypeAbilityChecker {
+        let struct_ty_storage = LoaderV2StructTypeStorage {
             loader: self,
             module_storage,
         };
@@ -352,7 +352,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
             &self.natives,
             size,
             compiled_module,
-            &checker,
+            &struct_ty_storage,
             &self.struct_name_index_map,
         )
     }

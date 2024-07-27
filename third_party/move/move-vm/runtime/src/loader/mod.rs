@@ -636,11 +636,11 @@ impl LoaderV1 {
                     module_store,
                 )?;
 
-                let checker = LoaderV1StructTypeAbilityChecker { module_store };
+                let struct_ty_storage = LoaderV1StructTypeStorage { module_store };
                 let script = Script::new(
                     ver_script,
                     &hash_value,
-                    &checker,
+                    &struct_ty_storage,
                     &self.struct_name_index_map,
                 )
                 .map_err(|e| e.finish(Location::Script))?;

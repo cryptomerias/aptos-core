@@ -11,7 +11,7 @@ use crate::{
     native_functions::NativeFunctions,
     storage::{
         struct_name_index_map::StructNameIndexMap,
-        struct_type_ability_checker::{LoaderV1StructTypeAbilityChecker, StructTypeAbilityChecker},
+        struct_type_storage::{LoaderV1StructTypeStorage, StructTypeStorage},
     },
 };
 use move_binary_format::{
@@ -119,12 +119,12 @@ impl ModuleStorageAdapter {
             return Ok(cached);
         }
 
-        let checker = LoaderV1StructTypeAbilityChecker { module_store: self };
+        let struct_ty_storage = LoaderV1StructTypeStorage { module_store: self };
         match Module::new(
             natives,
             module_size,
             module,
-            &checker,
+            &struct_ty_storage,
             struct_name_index_map,
         ) {
             Ok(module) => Ok(self.modules.store_module(&id, module)),
@@ -309,7 +309,7 @@ impl Module {
         natives: &NativeFunctions,
         size: usize,
         module: Arc<CompiledModule>,
-        struct_ability_checker: &impl StructTypeAbilityChecker,
+        struct_ty_storage: &impl StructTypeStorage,
         struct_name_index_map: &StructNameIndexMap,
     ) -> PartialVMResult<Self> {
         let id = module.self_id();
@@ -340,11 +340,9 @@ impl Module {
                 let module_id = module.module_id_for_handle(module_handle);
 
                 if module_handle != module.self_handle() {
-                    struct_ability_checker.paranoid_check(
-                        &module_id,
-                        struct_name,
-                        struct_handle,
-                    )?;
+                    struct_ty_storage
+                        .fetch_struct_ty(&module_id, struct_name)?
+                        .check_compatibility(struct_handle)?;
                 }
                 let struct_name = StructIdentifier {
                     module: module_id,
