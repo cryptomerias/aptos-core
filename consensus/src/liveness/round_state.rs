@@ -13,6 +13,7 @@ use aptos_consensus_types::{
     timeout_2chain::TwoChainTimeoutWithPartialSignatures, vote::Vote,
 };
 use aptos_crypto::HashValue;
+use aptos_infallible::Mutex;
 use aptos_logger::{prelude::*, Schema};
 use aptos_types::{
     ledger_info::LedgerInfoWithPartialSignatures, validator_verifier::ValidatorVerifier,
@@ -20,7 +21,12 @@ use aptos_types::{
 use futures::future::AbortHandle;
 use futures_channel::mpsc::UnboundedSender;
 use serde::Serialize;
-use std::{fmt, sync::Arc, time::Duration};
+use std::{
+    fmt,
+    ops::{Deref, DerefMut},
+    sync::{Arc, MutexGuard},
+    time::Duration,
+};
 
 /// A reason for starting a new round: introduced for monitoring / debug purposes.
 #[derive(Serialize, Debug, PartialEq, Eq)]
@@ -122,6 +128,88 @@ impl RoundTimeInterval for ExponentialTimeInterval {
         let base_multiplier = self.exponent_base.powf(f64::from(pow));
         let duration_ms = ((self.base_ms as f64) * base_multiplier).ceil() as u64;
         Duration::from_millis(duration_ms)
+    }
+}
+
+pub struct GuardedRoundState {
+    inner: Mutex<RoundState>,
+}
+
+impl GuardedRoundState {
+    /// Return if already voted for timeout
+    pub fn is_vote_timeout(&self) -> bool {
+        self.inner.lock().is_vote_timeout()
+    }
+
+    /// Return the current round.
+    pub fn current_round(&self) -> Round {
+        self.inner.lock().current_round()
+    }
+
+    /// Returns deadline for current round
+    pub fn current_round_deadline(&self) -> Duration {
+        self.inner.lock().current_round_deadline()
+    }
+
+    /// In case the local timeout corresponds to the current round, reset the timeout and
+    /// return true. Otherwise ignore and return false.
+    pub fn process_local_timeout(&self, round: Round) -> bool {
+        self.inner.lock().process_local_timeout(round)
+    }
+
+    /// Notify the RoundState about the potentially new QC, TC, and highest ordered round.
+    /// Note that some of these values might not be available by the caller.
+    pub fn process_certificates(&self, sync_info: SyncInfo) -> Option<NewRoundEvent> {
+        self.inner.lock().process_certificates(sync_info)
+    }
+
+    pub fn insert_vote(&self, vote: &Vote, verifier: &ValidatorVerifier) -> VoteReceptionResult {
+        self.inner.lock().insert_vote(vote, verifier)
+    }
+
+    pub fn record_vote(&self, vote: Vote) {
+        self.inner.lock().record_vote(vote)
+    }
+
+    pub async fn process_delayed_qc_msg(
+        &self,
+        validator_verifier: &ValidatorVerifier,
+        msg: DelayedQcMsg,
+    ) -> VoteReceptionResult {
+        self.inner
+            .lock()
+            .process_delayed_qc_msg(validator_verifier, msg)
+    }
+
+    pub fn vote_sent(&self) -> Option<Vote> {
+        self.inner.lock().vote_sent()
+    }
+
+    /// Setup a longer timeout task for leader because it enters the round earlier.
+    pub fn setup_leader_timeout(&self) {
+        self.inner.lock().setup_leader_timeout()
+    }
+
+    /// Setup the timeout task and return the duration of the current timeout
+    fn setup_timeout(&self, multiplier: u32) -> Duration {
+        self.inner.lock().setup_timeout(multiplier)
+    }
+
+    /// Setup the current round deadline and return the duration of the current round
+    fn setup_deadline(&self, multiplier: u32) -> Duration {
+        self.inner.lock().setup_deadline(multiplier)
+    }
+
+    pub fn locked_inner(&self) -> MutexGuard<RoundState> {
+        self.inner.lock()
+    }
+}
+
+impl From<RoundState> for GuardedRoundState {
+    fn from(inner: RoundState) -> Self {
+        Self {
+            inner: Mutex::new(inner),
+        }
     }
 }
 
@@ -310,7 +398,7 @@ impl RoundState {
         }
     }
 
-    pub async fn process_delayed_qc_msg(
+    pub fn process_delayed_qc_msg(
         &mut self,
         validator_verifier: &ValidatorVerifier,
         msg: DelayedQcMsg,

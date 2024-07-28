@@ -29,6 +29,7 @@ use aptos_consensus_types::{
     utils::PayloadTxnsSize,
 };
 use aptos_crypto::{hash::CryptoHash, HashValue};
+use aptos_infallible::Mutex;
 use aptos_logger::{error, info, sample, sample::SampleRate, warn};
 use aptos_types::{on_chain_config::ValidatorTxnConfig, validator_txn::ValidatorTransaction};
 use aptos_validator_transaction_pool as vtxn_pool;
@@ -248,7 +249,7 @@ pub struct ProposalGenerator {
     chain_health_backoff_config: ChainHealthBackoffConfig,
 
     // Last round that a proposal was generated
-    last_round_generated: Round,
+    last_round_generated: Mutex<Round>,
     quorum_store_enabled: bool,
     vtxn_config: ValidatorTxnConfig,
 
@@ -289,7 +290,7 @@ impl ProposalGenerator {
             max_failed_authors_to_store,
             pipeline_backpressure_config,
             chain_health_backoff_config,
-            last_round_generated: 0,
+            last_round_generated: Mutex::new(0),
             quorum_store_enabled,
             vtxn_config,
             allow_batches_without_pos_in_proposal,
@@ -304,7 +305,7 @@ impl ProposalGenerator {
     pub fn generate_nil_block(
         &self,
         round: Round,
-        proposer_election: &mut UnequivocalProposerElection,
+        proposer_election: Arc<dyn ProposerElection>,
     ) -> anyhow::Result<Block> {
         let hqc = self.ensure_highest_quorum_cert(round)?;
         let quorum_cert = hqc.as_ref().clone();
@@ -328,15 +329,18 @@ impl ProposalGenerator {
     /// 3. In case a given round is not greater than the calculated parent, return an OldRound
     /// error.
     pub async fn generate_proposal(
-        &mut self,
+        &self,
         round: Round,
-        proposer_election: &mut UnequivocalProposerElection,
+        proposer_election: Arc<dyn ProposerElection + Send + Sync>,
         wait_callback: BoxFuture<'static, ()>,
     ) -> anyhow::Result<BlockData> {
-        if self.last_round_generated < round {
-            self.last_round_generated = round;
-        } else {
-            bail!("Already proposed in the round {}", round);
+        {
+            let mut last_round_generated = self.last_round_generated.lock();
+            if *last_round_generated < round {
+                *last_round_generated = round;
+            } else {
+                bail!("Already proposed in the round {}", round);
+            }
         }
 
         let hqc = self.ensure_highest_quorum_cert(round)?;
@@ -498,7 +502,7 @@ impl ProposalGenerator {
 
     #[allow(clippy::unwrap_used)]
     async fn calculate_max_block_sizes(
-        &mut self,
+        &self,
         voting_power_ratio: f64,
         timestamp: Duration,
         round: Round,
@@ -630,7 +634,7 @@ impl ProposalGenerator {
         round: Round,
         previous_round: Round,
         include_cur_round: bool,
-        proposer_election: &mut UnequivocalProposerElection,
+        proposer_election: Arc<dyn ProposerElection>,
     ) -> Vec<(Round, Author)> {
         let end_round = round + u64::from(include_cur_round);
         let mut failed_authors = Vec::new();
