@@ -9,11 +9,11 @@ use crate::{
 };
 use anyhow::Context;
 use aptos::{account::fund::FundWithFaucet, common::types::CliCommand};
-use aptos_protos::indexer::v1::{raw_data_client::RawDataClient, GetTransactionsRequest};
 use aptos_indexer_grpc_utils::create_data_service_grpc_client;
+use aptos_protos::indexer::v1::{raw_data_client::RawDataClient, GetTransactionsRequest};
 use clap::{Parser, Subcommand};
-use tonic::transport::Channel;
 use std::{path::PathBuf, time::Duration};
+use tonic::transport::Channel;
 use url::Url;
 
 /// GRPC request metadata key for the token ID.
@@ -68,9 +68,11 @@ pub struct TransactionImporterArgs {
 impl TransactionImporterArgs {
     pub async fn run(&self, output_folder: PathBuf) -> anyhow::Result<()> {
         // Create a client and send the request.
-        let mut client: RawDataClient<Channel> =  create_data_service_grpc_client(
-            self.url.clone(), 
-            Some(Duration::from_secs(TRANSACTION_STREAM_TIMEOUT_IN_SECS))).await?;
+        let mut client: RawDataClient<Channel> = create_data_service_grpc_client(
+            self.url.clone(),
+            Some(Duration::from_secs(TRANSACTION_STREAM_TIMEOUT_IN_SECS)),
+        )
+        .await?;
         let mut request = tonic::Request::new(aptos_protos::indexer::v1::GetTransactionsRequest {
             starting_version: Some(self.version),
             transactions_count: Some(1),
@@ -78,9 +80,7 @@ impl TransactionImporterArgs {
         });
         request.metadata_mut().insert(
             GRPC_API_GATEWAY_API_KEY_HEADER,
-            format!("Bearer {}", self.key.clone())
-                .parse()
-                .unwrap(),
+            format!("Bearer {}", self.key.clone()).parse().unwrap(),
         );
         // Capture the transaction.
         let response = client.get_transactions(request).await?;
@@ -95,14 +95,14 @@ impl TransactionImporterArgs {
             anyhow::bail!("Failed to fetch the transaction.");
         }
         let transaction = transactions.first().unwrap();
-        let transaction_file = self.transaction_name.clone().replace("-", "_");
+        let transaction_file = self.transaction_name.clone().replace('-', "_");
         std::fs::write(
             output_folder.join(transaction_file).with_extension("json"),
             serde_json::to_string_pretty(&transaction)?,
-        ).context("Failed to write transaction to file.")
+        )
+        .context("Failed to write transaction to file.")
     }
 }
-
 
 #[derive(Parser)]
 pub struct TransactionGeneratorArgs {
@@ -260,7 +260,8 @@ impl TransactionGenerator {
                     if let Some(true) = transaction_summary.success {
                         if let Some(config) = config {
                             if let Some(output_name) = config.output_name {
-                                transactions_version_to_capture.push((transaction_summary.version.unwrap(), output_name));
+                                transactions_version_to_capture
+                                    .push((transaction_summary.version.unwrap(), output_name));
                             }
                         }
                     } else {

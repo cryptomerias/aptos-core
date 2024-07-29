@@ -1,7 +1,5 @@
 // build.rs
-use std::env;
-use std::fs;
-use std::path::Path;
+use std::{env, fs, path::Path};
 
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -13,7 +11,7 @@ fn main() {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
             let file_name = path.file_stem().unwrap().to_str().unwrap();
-            let const_name = file_name.to_uppercase().replace("-", "_");
+            let const_name = file_name.to_uppercase().replace('-', "_");
 
             let json_code = format!(
                 r#"

@@ -10,9 +10,8 @@ include!(concat!(env!("OUT_DIR"), "/generate_transactions.rs"));
 
 #[cfg(test)]
 mod tests {
-    use aptos_protos::transaction::v1::Transaction;
-
     use super::*;
+    use aptos_protos::transaction::v1::Transaction;
 
     #[test]
     fn test_generate_transactions() {

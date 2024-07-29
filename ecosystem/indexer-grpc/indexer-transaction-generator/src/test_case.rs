@@ -124,8 +124,8 @@ impl TryFrom<PathBuf> for Step {
         let action_folder = regex::Regex::new(ACTION_FOLDER_PATTERN)
             .expect("Regex pattern for action folder is invalid.");
 
-         // If it's not a folder, return an error.
-         if !path.is_dir() {
+        // If it's not a folder, return an error.
+        if !path.is_dir() {
             return Err(anyhow::anyhow!("Current step is not a folder."));
         }
         // Load the test case configuration.
