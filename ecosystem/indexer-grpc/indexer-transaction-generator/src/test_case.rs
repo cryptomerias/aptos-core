@@ -15,6 +15,7 @@ const ACTION_FOLDER_PATTERN: &str = r"^action_(\d+)(?:_[a-zA-Z0-9-]*)?$";
 pub struct TestStepConfig {
     // config.json under the setup or action folder.
     pub fund_amount: Option<u64>,
+    pub output_name: Option<String>,
 }
 
 /// TestCase is to validate the test case and store the test case metadata.
@@ -82,7 +83,7 @@ impl TestCase {
 #[derive(PartialEq, Eq, Debug, Hash)]
 pub enum Step {
     Setup((PathBuf, u64, Option<TestStepConfig>)),
-    Action((PathBuf, u64)),
+    Action((PathBuf, u64, Option<TestStepConfig>)),
     /// This is to handle the case when the step is not a setup or action folder.
     UNKNOWN,
 }
@@ -91,7 +92,7 @@ impl Step {
     fn priority(&self) -> u64 {
         match self {
             Step::Setup((_, index, _)) => *index,
-            Step::Action((_, index)) => *index + u64::MAX / 2,
+            Step::Action((_, index, _)) => *index + u64::MAX / 2,
             Step::UNKNOWN => u64::MAX,
         }
     }
@@ -101,7 +102,7 @@ impl Display for Step {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Step::Setup((_, index, _)) => write!(f, "Setup {}", index),
-            Step::Action((_, index)) => write!(f, "Action {}", index),
+            Step::Action((_, index, _)) => write!(f, "Action {}", index),
             Step::UNKNOWN => write!(f, "UNKNOWN"),
         }
     }
@@ -122,6 +123,24 @@ impl TryFrom<PathBuf> for Step {
             .expect("Regex pattern for setup folder is invalid.");
         let action_folder = regex::Regex::new(ACTION_FOLDER_PATTERN)
             .expect("Regex pattern for action folder is invalid.");
+
+         // If it's not a folder, return an error.
+         if !path.is_dir() {
+            return Err(anyhow::anyhow!("Current step is not a folder."));
+        }
+        // Load the test case configuration.
+        let test_config_path = path.join(TEST_CONFIG_FILE);
+        let test_config = match test_config_path.exists() {
+            true => {
+                let test_config_raw_string = std::fs::read_to_string(test_config_path)
+                    .context("Failed to read test config file.")?;
+                let test_config: TestStepConfig = serde_json::from_str(&test_config_raw_string)
+                    .context("Failed to parse test config file.")?;
+                Some(test_config)
+            },
+            false => None,
+        };
+
         if let Some(index) = setup_folder.captures(file_name) {
             let index = index
                 .get(1)
@@ -129,23 +148,6 @@ impl TryFrom<PathBuf> for Step {
                 .as_str()
                 .parse::<u64>()
                 .context("Folder index is invalid.")?;
-            // If it's not a folder, return an error.
-            if !path.is_dir() {
-                return Err(anyhow::anyhow!("Setup step is not a folder."));
-            }
-            // Load the test case configuration.
-            let test_config_path = path.join(TEST_CONFIG_FILE);
-            let test_config = match test_config_path.exists() {
-                true => {
-                    let test_config_raw_string = std::fs::read_to_string(test_config_path)
-                        .context("Failed to read test config file.")?;
-                    let test_config: TestStepConfig = serde_json::from_str(&test_config_raw_string)
-                        .context("Failed to parse test config file.")?;
-                    Some(test_config)
-                },
-                false => None,
-            };
-
             return Ok(Step::Setup((path, index, test_config)));
         }
 
@@ -160,7 +162,7 @@ impl TryFrom<PathBuf> for Step {
             if !path.is_dir() {
                 return Err(anyhow::anyhow!("Action step is not a folder."));
             }
-            return Ok(Step::Action((path, index)));
+            return Ok(Step::Action((path, index, test_config)));
         }
         Ok(Step::UNKNOWN)
     }
@@ -199,7 +201,7 @@ mod tests {
             _ => panic!("Setup step is not parsed correctly."),
         }
         match action_step {
-            Step::Action((_, index)) => assert_eq!(index, 1),
+            Step::Action((_, index, _)) => assert_eq!(index, 1),
             _ => panic!("Action step is not parsed correctly."),
         }
         match unknown_step {
@@ -211,7 +213,7 @@ mod tests {
             _ => panic!("Setup step with suffix is not parsed correctly."),
         }
         match action_step_with_suffix {
-            Step::Action((_, index)) => assert_eq!(index, 1),
+            Step::Action((_, index, _)) => assert_eq!(index, 1),
             _ => panic!("Action step with suffix is not parsed correctly."),
         }
     }

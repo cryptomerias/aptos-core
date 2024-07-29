@@ -10,38 +10,114 @@ use crate::{
 use anyhow::Context;
 use aptos::{account::fund::FundWithFaucet, common::types::CliCommand};
 use aptos_protos::indexer::v1::{raw_data_client::RawDataClient, GetTransactionsRequest};
-use clap::Parser;
-use std::path::PathBuf;
+use aptos_indexer_grpc_utils::create_data_service_grpc_client;
+use clap::{Parser, Subcommand};
+use tonic::transport::Channel;
+use std::{path::PathBuf, time::Duration};
+use url::Url;
 
+/// GRPC request metadata key for the token ID.
+const GRPC_API_GATEWAY_API_KEY_HEADER: &str = "authorization";
 const LOCAL_INDEXER_GRPC_URL: &str = "http://127.0.0.1:50051";
 const TRANSACTION_STREAM_TIMEOUT_IN_SECS: u64 = 60;
+
+#[derive(Parser)]
+pub struct IndexerCliArgs {
+    #[clap(subcommand)]
+    pub command: Command,
+
+    #[clap(long)]
+    pub output_folder: PathBuf,
+}
+
+// IndexerCliArgs is the main entry point for the transaction generator.
+// It takes a subcommand to import or generate transactions.
+#[derive(Subcommand)]
+pub enum Command {
+    /// Import transactions from a running transaction stream service.
+    Import(TransactionImporterArgs),
+    /// Generate transactions from the test cases.
+    Generate(TransactionGeneratorArgs),
+}
+
+impl IndexerCliArgs {
+    pub async fn run(&self) -> anyhow::Result<()> {
+        match &self.command {
+            Command::Import(args) => args.run(self.output_folder.clone()).await,
+            Command::Generate(args) => args.run(self.output_folder.clone()).await,
+        }
+    }
+}
+
+#[derive(Parser)]
+pub struct TransactionImporterArgs {
+    /// Path to the root folder for the output transaction.
+    #[clap(long)]
+    pub url: Url,
+
+    #[clap(long)]
+    pub key: String,
+
+    #[clap(long)]
+    pub version: u64,
+
+    #[clap(long)]
+    pub transaction_name: String,
+}
+
+impl TransactionImporterArgs {
+    pub async fn run(&self, output_folder: PathBuf) -> anyhow::Result<()> {
+        // Create a client and send the request.
+        let mut client: RawDataClient<Channel> =  create_data_service_grpc_client(
+            self.url.clone(), 
+            Some(Duration::from_secs(TRANSACTION_STREAM_TIMEOUT_IN_SECS))).await?;
+        let mut request = tonic::Request::new(aptos_protos::indexer::v1::GetTransactionsRequest {
+            starting_version: Some(self.version),
+            transactions_count: Some(1),
+            ..GetTransactionsRequest::default()
+        });
+        request.metadata_mut().insert(
+            GRPC_API_GATEWAY_API_KEY_HEADER,
+            format!("Bearer {}", self.key.clone())
+                .parse()
+                .unwrap(),
+        );
+        // Capture the transaction.
+        let response = client.get_transactions(request).await?;
+        let mut response = response.into_inner();
+        let mut transactions = Vec::new();
+        while let Ok(Some(resp_item)) = response.message().await {
+            for transaction in resp_item.transactions {
+                transactions.push(transaction);
+            }
+        }
+        if transactions.is_empty() {
+            anyhow::bail!("Failed to fetch the transaction.");
+        }
+        let transaction = transactions.first().unwrap();
+        let transaction_file = self.transaction_name.clone().replace("-", "_");
+        std::fs::write(
+            output_folder.join(transaction_file).with_extension("json"),
+            serde_json::to_string_pretty(&transaction)?,
+        ).context("Failed to write transaction to file.")
+    }
+}
+
 
 #[derive(Parser)]
 pub struct TransactionGeneratorArgs {
     /// Path to the root folder for the test cases.
     #[clap(long)]
-    pub test_cases_folder: PathBuf,
-    /// Path to the root folder for the output transaction.
-    #[clap(long)]
-    pub output_folder: PathBuf,
-
+    pub move_fixtures: PathBuf,
     /// Localnet node arguments.
     #[clap(flatten)]
     pub localnet_node: LocalnetNodeArgs,
-
-    /// Release version.
-    #[clap(long, default_value = "main")]
-    pub release_version: String,
 }
 
 impl TransactionGeneratorArgs {
-    pub async fn run(&self) -> anyhow::Result<()> {
+    pub async fn run(&self, output_folder: PathBuf) -> anyhow::Result<()> {
         let managed_node = self.localnet_node.start_node().await?;
-        let output_folder = self
-            .output_folder
-            .clone()
-            .join(self.release_version.clone());
-        TransactionGenerator::new(managed_node, self.test_cases_folder.clone(), output_folder)
+        TransactionGenerator::new(managed_node, self.move_fixtures.clone(), output_folder)
             .run()
             .await
     }
@@ -104,7 +180,7 @@ impl TransactionGenerator {
             test_case.name, self.output_folder,
         );
         // Test case output folder.
-        let test_case_output_folder = self.output_folder.join(&test_case.name);
+        let test_case_output_folder = self.output_folder.clone();
         // If the output folder doesn't exist, create it.
         if !test_case_output_folder.exists() {
             std::fs::create_dir_all(&test_case_output_folder)?;
@@ -144,7 +220,7 @@ impl TransactionGenerator {
                         .await
                         .context(format!("Failed to publish module: {:?}", path))?;
                 },
-                Step::Action((path, _)) => {
+                Step::Action((path, _, config)) => {
                     // Change current directory to the setup script folder.
                     std::env::set_current_dir(&path)
                         .context(format!("Failed to change directory to: {:?}", path))?;
@@ -182,11 +258,11 @@ impl TransactionGenerator {
                         .await
                         .context(format!("Failed to run the script: {:?}", path))?;
                     if let Some(true) = transaction_summary.success {
-                        transactions_version_to_capture.push(
-                            transaction_summary
-                                .version
-                                .context("Failed to get the transaction version.")?,
-                        );
+                        if let Some(config) = config {
+                            if let Some(output_name) = config.output_name {
+                                transactions_version_to_capture.push((transaction_summary.version.unwrap(), output_name));
+                            }
+                        }
                     } else {
                         anyhow::bail!("Failed to execute the script: {:?}", path);
                     }
@@ -203,15 +279,16 @@ impl TransactionGenerator {
     /// Capture the transactions.
     async fn capture_transactions(
         &self,
-        transaction_versions: Vec<u64>,
+        transaction_versions_with_names: Vec<(u64, String)>,
         test_case_output_folder: PathBuf,
     ) -> anyhow::Result<()> {
-        if transaction_versions.is_empty() {
+        if transaction_versions_with_names.is_empty() {
             anyhow::bail!("No transaction versions provided to capture.");
         }
-        // Make sure the transactions are sorted.
-        let mut transaction_versions = transaction_versions;
-        transaction_versions.sort();
+        let transaction_versions = transaction_versions_with_names
+            .iter()
+            .map(|(version, _)| *version)
+            .collect::<Vec<_>>();
         // Build the request.
         let first_version = *transaction_versions.first().unwrap();
         let last_version = *transaction_versions.last().unwrap();
@@ -267,9 +344,10 @@ impl TransactionGenerator {
                 transaction
             })
             .collect::<Vec<_>>();
-        for transaction in transactions {
+        for (idx, transaction) in transactions.iter().enumerate() {
+            let output_name = transaction_versions_with_names.get(idx).unwrap().1.clone();
             let transaction_file =
-                test_case_output_folder.join(format!("{}.json", transaction.version));
+                test_case_output_folder.join(format!("generated_{}.json", output_name));
             std::fs::write(
                 transaction_file,
                 serde_json::to_string_pretty(&transaction)?,

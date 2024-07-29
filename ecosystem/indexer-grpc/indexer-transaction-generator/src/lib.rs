@@ -4,3 +4,6 @@
 pub mod managed_node;
 pub mod test_case;
 pub mod transaction_generator;
+
+#[cfg(test)]
+include!(concat!(env!("OUT_DIR"), "/generate_transactions.rs"));
