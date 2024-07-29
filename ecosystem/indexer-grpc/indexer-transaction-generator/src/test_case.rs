@@ -253,7 +253,7 @@ mod tests {
         let test_case_path = PathBuf::from("src/tests/simple_test");
         let test_case = TestCase::load(test_case_path).unwrap();
         assert_eq!(test_case.name, "simple_test");
-        assert_eq!(test_case.steps.len(), 3);
+        assert_eq!(test_case.steps.len(), 4);
         let setup_1_test_config = match &test_case.steps[0] {
             Step::Setup((_, _, config)) => config,
             _ => panic!("Setup 1 is not parsed correctly."),
