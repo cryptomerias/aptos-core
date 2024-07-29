@@ -767,7 +767,7 @@ fn publish_package(session: &mut SessionExt, pack: &ReleasePackage) {
         .map(|(c, _)| c.to_vec())
         .collect::<Vec<_>>();
     session
-        .publish_module_bundle(code, addr, &mut UnmeteredGasMeter)
+        .publish_module_bundle(code, addr, &mut UnmeteredGasMeter, &DummyStorage)
         .unwrap_or_else(|e| {
             panic!(
                 "Failure publishing package `{}`: {:?}",

@@ -37,7 +37,6 @@ use move_vm_types::{
     },
 };
 use parking_lot::{MappedRwLockReadGuard, Mutex, RwLock};
-use sha3::{Digest, Sha3_256};
 use std::{
     collections::{btree_map, BTreeMap, BTreeSet},
     hash::Hash,
@@ -54,12 +53,15 @@ mod type_loader;
 use crate::{
     loader::modules::{StructVariantInfo, VariantFieldInfo},
     storage::{
-        dummy::DummyVerifier, loader::LoaderV2, script_storage::ScriptStorage,
-        struct_name_index_map::StructNameIndexMap, struct_type_storage::LoaderV1StructTypeStorage,
+        dummy::DummyVerifier,
+        loader::LoaderV2,
+        script_storage::{script_hash, ScriptStorage},
+        struct_name_index_map::StructNameIndexMap,
+        struct_type_storage::LoaderV1StructTypeStorage,
     },
 };
 pub use function::LoadedFunction;
-pub(crate) use function::{Function, FunctionHandle, FunctionInstantiation, Scope};
+pub(crate) use function::{Function, FunctionHandle, FunctionInstantiation};
 pub(crate) use modules::{Module, ModuleCache, ModuleStorage, ModuleStorageAdapter};
 use move_binary_format::file_format::{
     StructVariantHandleIndex, StructVariantInstantiationIndex, VariantFieldHandleIndex,
@@ -277,7 +279,7 @@ impl Loader {
         module_store: &ModuleStorageAdapter,
         module_storage: &impl ModuleStorageV2,
         script_storage: &impl ScriptStorage,
-    ) -> VMResult<LoadedFunction> {
+    ) -> VMResult<(Arc<Script>, LoadedFunction)> {
         match self {
             Self::V1(loader) => loader.load_script(script_blob, ty_args, data_store, module_store),
             Self::V2(loader) => loader
@@ -491,26 +493,6 @@ impl Loader {
             ),
         }
     }
-
-    fn get_existing_script(
-        &self,
-        hash: &ScriptHash,
-        script_storage: &impl ScriptStorage,
-    ) -> PartialVMResult<Arc<Script>> {
-        match self {
-            Self::V1(loader) => loader
-                .scripts
-                .read()
-                .scripts
-                .get(hash)
-                .cloned()
-                .ok_or_else(|| {
-                    PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                        .with_message(format!("Script for {:?} does not exist in cache", hash))
-                }),
-            Self::V2(_) => script_storage.fetch_existing_verified_script(hash),
-        }
-    }
 }
 
 // A Loader is responsible to load scripts and modules and holds the cache of all loaded
@@ -591,11 +573,8 @@ impl LoaderV1 {
         traversal_context: &mut TraversalContext,
         script_blob: &[u8],
     ) -> VMResult<()> {
-        let mut sha3_256 = Sha3_256::new();
-        sha3_256.update(script_blob);
-        let hash_value: [u8; 32] = sha3_256.finalize().into();
-
-        let script = data_store.load_compiled_script_to_cache(script_blob, hash_value)?;
+        let script =
+            data_store.load_compiled_script_to_cache(script_blob, script_hash(script_blob))?;
         let script = traversal_context.referenced_scripts.alloc(script);
 
         // TODO(Gas): Should we charge dependency gas for the script itself?
@@ -625,14 +604,11 @@ impl LoaderV1 {
         ty_args: &[TypeTag],
         data_store: &mut TransactionDataCache,
         module_store: &ModuleStorageAdapter,
-    ) -> VMResult<LoadedFunction> {
+    ) -> VMResult<(Arc<Script>, LoadedFunction)> {
         // Retrieve or load the script.
-        let mut sha3_256 = Sha3_256::new();
-        sha3_256.update(script_blob);
-        let hash_value: [u8; 32] = sha3_256.finalize().into();
-
+        let hash_value = script_hash(script_blob);
         let mut scripts = self.scripts.write();
-        let main = match scripts.get(&hash_value) {
+        let script = match scripts.get(&hash_value) {
             Some(cached) => cached,
             None => {
                 let ver_script = self.deserialize_and_verify_script(
@@ -643,13 +619,9 @@ impl LoaderV1 {
                 )?;
 
                 let struct_ty_storage = LoaderV1StructTypeStorage { module_store };
-                let script = Script::new(
-                    ver_script,
-                    &hash_value,
-                    &struct_ty_storage,
-                    &self.struct_name_index_map,
-                )
-                .map_err(|e| e.finish(Location::Script))?;
+                let script =
+                    Script::new(ver_script, &struct_ty_storage, &self.struct_name_index_map)
+                        .map_err(|e| e.finish(Location::Script))?;
                 scripts.insert(hash_value, script)
             },
         };
@@ -659,6 +631,7 @@ impl LoaderV1 {
             .map(|ty| self.load_type(ty, data_store, module_store))
             .collect::<VMResult<Vec<_>>>()?;
 
+        let main = script.entry_point();
         Type::verify_ty_arg_abilities(main.ty_param_abilities(), &ty_args).map_err(|e| {
             e.with_message(format!(
                 "Failed to verify type arguments for script {}",
@@ -667,10 +640,11 @@ impl LoaderV1 {
             .finish(Location::Script)
         })?;
 
-        Ok(LoadedFunction {
+        let function = LoadedFunction {
             ty_args,
             function: main,
-        })
+        };
+        Ok((script, function))
     }
 
     // The process of deserialization and verification is not and it must not be under lock.
@@ -1248,25 +1222,48 @@ pub(crate) struct Resolver<'a> {
 }
 
 impl<'a> Resolver<'a> {
-    fn for_module(
+    pub(crate) fn new_for_function_in_module(
+        function: &Function,
         loader: &'a Loader,
         module_store: &'a ModuleStorageAdapter,
-        module: Arc<Module>,
-        module_storage: &'a impl ModuleStorageV2,
-    ) -> Self {
+        module_storage: &'a dyn ModuleStorageV2,
+    ) -> PartialVMResult<Self> {
+        let module_id = function
+            .module_id()
+            .ok_or_else(|| {
+                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
+                    format!(
+                        "Function '{}' must always have a module owner",
+                        function.name()
+                    ),
+                )
+            })?
+            .clone();
+
+        let module = match loader {
+            Loader::V1(_) => module_store.module_at(&module_id).ok_or_else(|| {
+                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
+                    format!("Module {} does not exist in cache but it should", module_id),
+                )
+            })?,
+            Loader::V2(loader) => {
+                loader.load_module(module_storage, module_id.address(), module_id.name())?
+            },
+        };
+
         let binary = BinaryType::Module(module);
-        Self {
+        Ok(Self {
             loader,
             binary,
             module_store,
             module_storage,
-        }
+        })
     }
 
-    fn for_script(
+    pub(crate) fn new_for_script(
+        script: Arc<Script>,
         loader: &'a Loader,
         module_store: &'a ModuleStorageAdapter,
-        script: Arc<Script>,
         module_storage: &'a impl ModuleStorageV2,
     ) -> Self {
         let binary = BinaryType::Script(script);

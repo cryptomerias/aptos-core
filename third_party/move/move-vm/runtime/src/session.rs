@@ -9,7 +9,7 @@ use crate::{
     module_traversal::TraversalContext,
     move_vm::MoveVM,
     native_extensions::NativeContextExtensions,
-    storage::{dummy::DummyStorage, module_storage::ModuleStorage},
+    storage::module_storage::ModuleStorage,
     ScriptStorage,
 };
 use bytes::Bytes;
@@ -83,11 +83,6 @@ impl<'r, 'l> Session<'r, 'l> {
             traversal_context,
             &mut self.native_extensions,
             module_storage,
-            // TODO(George): Should not be used anyway, refactor code so that loaded
-            //               function knows its scope? Although we load a function only
-            //               to verify arguments so the problem should go away because we
-            //               will not expose it.
-            &DummyStorage,
         )?;
         Ok(())
     }
@@ -121,8 +116,6 @@ impl<'r, 'l> Session<'r, 'l> {
             traversal_context,
             &mut self.native_extensions,
             module_storage,
-            // TODO(George): Add scope to loaded function.
-            &DummyStorage,
         )
     }
 
@@ -143,8 +136,6 @@ impl<'r, 'l> Session<'r, 'l> {
             traversal_context,
             &mut self.native_extensions,
             module_storage,
-            // TODO(George): Add scope to loaded function!
-            &DummyStorage,
         )
     }
 
@@ -206,8 +197,9 @@ impl<'r, 'l> Session<'r, 'l> {
         module: Vec<u8>,
         sender: AccountAddress,
         gas_meter: &mut impl GasMeter,
+        module_storage: &impl ModuleStorage,
     ) -> VMResult<()> {
-        self.publish_module_bundle(vec![module], sender, gas_meter)
+        self.publish_module_bundle(vec![module], sender, gas_meter, module_storage)
     }
 
     /// Publish a series of modules.
@@ -230,6 +222,7 @@ impl<'r, 'l> Session<'r, 'l> {
         modules: Vec<Vec<u8>>,
         sender: AccountAddress,
         gas_meter: &mut impl GasMeter,
+        module_storage: &impl ModuleStorage,
     ) -> VMResult<()> {
         self.move_vm.runtime.publish_module_bundle(
             modules,
@@ -238,7 +231,7 @@ impl<'r, 'l> Session<'r, 'l> {
             &self.module_store,
             gas_meter,
             Compatibility::full_check(),
-            &DummyStorage,
+            module_storage,
         )
     }
 
@@ -248,6 +241,7 @@ impl<'r, 'l> Session<'r, 'l> {
         modules: Vec<Vec<u8>>,
         sender: AccountAddress,
         gas_meter: &mut impl GasMeter,
+        module_storage: &impl ModuleStorage,
         compat_config: Compatibility,
     ) -> VMResult<()> {
         self.move_vm.runtime.publish_module_bundle(
@@ -257,7 +251,7 @@ impl<'r, 'l> Session<'r, 'l> {
             &self.module_store,
             gas_meter,
             compat_config,
-            &DummyStorage,
+            module_storage,
         )
     }
 
@@ -266,6 +260,7 @@ impl<'r, 'l> Session<'r, 'l> {
         modules: Vec<Vec<u8>>,
         sender: AccountAddress,
         gas_meter: &mut impl GasMeter,
+        module_storage: &impl ModuleStorage,
     ) -> VMResult<()> {
         self.move_vm.runtime.publish_module_bundle(
             modules,
@@ -274,12 +269,12 @@ impl<'r, 'l> Session<'r, 'l> {
             &self.module_store,
             gas_meter,
             Compatibility::no_check(),
-            &DummyStorage,
+            module_storage,
         )
     }
 
-    pub fn num_mutated_accounts(&self, sender: &AccountAddress) -> u64 {
-        self.data_cache.num_mutated_accounts(sender)
+    pub fn num_mutated_resources(&self, sender: &AccountAddress) -> u64 {
+        self.data_cache.num_mutated_resources(sender)
     }
 
     /// Finish up the session and produce the side effects.
@@ -372,14 +367,15 @@ impl<'r, 'l> Session<'r, 'l> {
         script: impl Borrow<[u8]>,
         ty_args: &[TypeTag],
     ) -> VMResult<LoadedFunction> {
-        self.move_vm.runtime.loader().load_script(
+        let (_, main) = self.move_vm.runtime.loader().load_script(
             script.borrow(),
             ty_args,
             &mut self.data_cache,
             &self.module_store,
             module_storage,
             script_storage,
-        )
+        )?;
+        Ok(main)
     }
 
     /// Load a module, a function, and all of its types into cache

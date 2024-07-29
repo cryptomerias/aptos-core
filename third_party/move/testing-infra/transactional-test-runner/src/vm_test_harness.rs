@@ -170,7 +170,7 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
                     let id = module.self_id();
                     let sender = *id.address();
                     session
-                        .publish_module(module_bytes, sender, gas_status)
+                        .publish_module(module_bytes, sender, gas_status, &DummyStorage)
                         .unwrap();
                 }
                 Ok(())
@@ -221,6 +221,7 @@ impl<'a> MoveTestAdapter<'a> for SimpleVMTestAdapter<'a> {
                 vec![module_bytes],
                 sender,
                 gas_status,
+                &DummyStorage,
                 compat,
             )
         });

@@ -53,8 +53,13 @@ fn test_publish_module_with_nested_loops() {
         );
 
         let mut sess = vm.new_session(&storage);
-        sess.publish_module(m_blob.clone(), TEST_ADDR, &mut UnmeteredGasMeter)
-            .unwrap();
+        sess.publish_module(
+            m_blob.clone(),
+            TEST_ADDR,
+            &mut UnmeteredGasMeter,
+            &DummyStorage,
+        )
+        .unwrap();
     }
 
     // Should fail with max_loop_depth = 1
@@ -75,7 +80,7 @@ fn test_publish_module_with_nested_loops() {
         );
 
         let mut sess = vm.new_session(&storage);
-        sess.publish_module(m_blob, TEST_ADDR, &mut UnmeteredGasMeter)
+        sess.publish_module(m_blob, TEST_ADDR, &mut UnmeteredGasMeter, &DummyStorage)
             .unwrap_err();
     }
 }

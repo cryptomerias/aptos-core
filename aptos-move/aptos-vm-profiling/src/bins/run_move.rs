@@ -188,6 +188,7 @@ fn main() -> Result<()> {
             module_blob,
             *module.self_id().address(),
             &mut UnmeteredGasMeter,
+            &DummyStorage,
         )?;
         let args: Vec<Vec<u8>> = vec![];
         let res = sess.execute_function_bypass_visibility(

@@ -172,7 +172,7 @@ impl<'r> TransactionDataCache<'r> {
         Ok(change_set)
     }
 
-    pub(crate) fn num_mutated_accounts(&self, sender: &AccountAddress) -> u64 {
+    pub(crate) fn num_mutated_resources(&self, sender: &AccountAddress) -> u64 {
         // The sender's account will always be mutated.
         let mut total_mutated_accounts: u64 = 1;
         for (addr, entry) in self.account_map.iter() {

@@ -91,13 +91,6 @@ impl ScriptStorage for DummyStorage {
     ) -> PartialVMResult<Arc<Script>> {
         unexpected_unimplemented_error!()
     }
-
-    fn fetch_existing_verified_script(
-        &self,
-        _script_hash: &[u8; 32],
-    ) -> PartialVMResult<Arc<Script>> {
-        unexpected_unimplemented_error!()
-    }
 }
 
 /// Placeholder to use for now before an actual verifier is implemented.

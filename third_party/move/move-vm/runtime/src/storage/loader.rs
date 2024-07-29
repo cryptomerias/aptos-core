@@ -7,10 +7,8 @@ use crate::{
     module_traversal::TraversalContext,
     native_functions::NativeFunctions,
     storage::{
-        module_storage::ModuleStorage,
-        script_storage::{script_hash, ScriptStorage},
-        struct_name_index_map::StructNameIndexMap,
-        struct_type_storage::LoaderV2StructTypeStorage,
+        module_storage::ModuleStorage, script_storage::ScriptStorage,
+        struct_name_index_map::StructNameIndexMap, struct_type_storage::LoaderV2StructTypeStorage,
         verifier::Verifier,
     },
     unexpected_unimplemented_error, LoadedFunction,
@@ -141,21 +139,12 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         script_storage: &impl ScriptStorage,
         serialized_script: &[u8],
         ty_args: &[TypeTag],
-    ) -> PartialVMResult<LoadedFunction> {
+    ) -> PartialVMResult<(Arc<Script>, LoadedFunction)> {
         // Step 1: Load script. During the loading process, if script has not been previously
         // cached, it will be verified.
-        let script_hash = script_hash(serialized_script);
-        let main = script_storage
-            .fetch_or_create_verified_script(serialized_script, &|cs| {
-                self.build_script(
-                    module_storage,
-                    cs,
-                    // TODO(George): We re-calculate the script hash because function
-                    //   is not aware of the context in which it executes. Revisit.
-                    script_hash,
-                )
-            })?
-            .entry_point();
+        let script = script_storage.fetch_or_create_verified_script(serialized_script, &|cs| {
+            self.build_script(module_storage, cs)
+        })?;
 
         // Step 2: Load & verify types used as type arguments passed to this script. Note that
         // arguments for scripts are verified on the client side.
@@ -163,12 +152,15 @@ impl<V: Clone + Verifier> LoaderV2<V> {
             .iter()
             .map(|ty| self.load_ty(module_storage, ty))
             .collect::<PartialVMResult<Vec<_>>>()?;
+
+        let main = script.entry_point();
         Type::verify_ty_arg_abilities(main.ty_param_abilities(), &ty_args)?;
 
-        Ok(LoadedFunction {
+        let function = LoadedFunction {
             ty_args,
             function: main,
-        })
+        };
+        Ok((script, function))
     }
 
     /// Returns a loaded & verified module corresponding to the specified name.
@@ -284,7 +276,6 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         &self,
         module_storage: &dyn ModuleStorage,
         compiled_script: Arc<CompiledScript>,
-        script_hash: [u8; 32],
     ) -> PartialVMResult<Script> {
         // Verify local properties of the script.
         self.verifier.verify_script(compiled_script.as_ref())?;
@@ -311,7 +302,6 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         };
         Script::new(
             compiled_script,
-            &script_hash,
             &struct_ty_storage,
             &self.struct_name_index_map,
         )

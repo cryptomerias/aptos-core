@@ -34,6 +34,7 @@ fn test_publish_module_with_custom_max_binary_format_version() {
             b_new.clone(),
             *m.self_id().address(),
             &mut UnmeteredGasMeter,
+            &DummyStorage,
         )
         .unwrap();
 
@@ -41,6 +42,7 @@ fn test_publish_module_with_custom_max_binary_format_version() {
             b_old.clone(),
             *m.self_id().address(),
             &mut UnmeteredGasMeter,
+            &DummyStorage,
         )
         .unwrap();
     }
@@ -68,6 +70,7 @@ fn test_publish_module_with_custom_max_binary_format_version() {
                 b_new.clone(),
                 *m.self_id().address(),
                 &mut UnmeteredGasMeter,
+                &DummyStorage,
             )
             .unwrap_err()
             .major_status(),
@@ -78,6 +81,7 @@ fn test_publish_module_with_custom_max_binary_format_version() {
             b_old.clone(),
             *m.self_id().address(),
             &mut UnmeteredGasMeter,
+            &DummyStorage,
         )
         .unwrap();
     }

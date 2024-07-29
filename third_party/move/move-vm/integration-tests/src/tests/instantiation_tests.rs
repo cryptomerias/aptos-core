@@ -118,7 +118,7 @@ fn instantiation_err() {
     cm.serialize(&mut mod_bytes).unwrap();
 
     session
-        .publish_module(mod_bytes, addr, &mut UnmeteredGasMeter)
+        .publish_module(mod_bytes, addr, &mut UnmeteredGasMeter, &DummyStorage)
         .expect("Module must publish");
 
     let mut ty_arg = TypeTag::U128;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{
-    intern_type, BinaryCache, Function, FunctionHandle, FunctionInstantiation, Scope, ScriptHash,
+    intern_type, BinaryCache, Function, FunctionHandle, FunctionInstantiation, ScriptHash,
 };
 use crate::storage::{
     struct_name_index_map::StructNameIndexMap, struct_type_storage::StructTypeStorage,
@@ -44,7 +44,6 @@ pub struct Script {
 impl Script {
     pub(crate) fn new(
         script: Arc<CompiledScript>,
-        script_hash: &ScriptHash,
         struct_ty_storage: &impl StructTypeStorage,
         struct_name_index_map: &StructNameIndexMap,
     ) -> PartialVMResult<Self> {
@@ -94,8 +93,6 @@ impl Script {
             });
         }
 
-        let scope = Scope::Script(*script_hash);
-
         let code: Vec<Bytecode> = script.code.code.clone();
         let parameters = script.signature_at(script.parameters).clone();
 
@@ -130,7 +127,7 @@ impl Script {
             is_native: def_is_native,
             is_friend_or_private: false,
             is_entry: false,
-            scope,
+            scope: None,
             name,
             // Script must not return values.
             return_tys: vec![],
@@ -215,17 +212,14 @@ impl ScriptCache {
         }
     }
 
-    pub(crate) fn get(&self, hash: &ScriptHash) -> Option<Arc<Function>> {
-        self.scripts.get(hash).map(|script| script.entry_point())
+    pub(crate) fn get(&self, hash: &ScriptHash) -> Option<Arc<Script>> {
+        self.scripts.get(hash).cloned()
     }
 
-    pub(crate) fn insert(&mut self, hash: ScriptHash, script: Script) -> Arc<Function> {
+    pub(crate) fn insert(&mut self, hash: ScriptHash, script: Script) -> Arc<Script> {
         match self.get(&hash) {
             Some(cached) => cached,
-            None => {
-                let script = self.scripts.insert(hash, script);
-                script.entry_point()
-            },
+            None => self.scripts.insert(hash, script).clone(),
         }
     }
 }

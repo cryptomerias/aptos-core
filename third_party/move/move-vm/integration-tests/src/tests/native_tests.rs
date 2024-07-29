@@ -74,8 +74,13 @@ fn test_publish_module_with_nested_loops() {
         });
 
         let mut sess = vm.new_session(&storage);
-        sess.publish_module(m_blob.clone(), TEST_ADDR, &mut UnmeteredGasMeter)
-            .unwrap();
+        sess.publish_module(
+            m_blob.clone(),
+            TEST_ADDR,
+            &mut UnmeteredGasMeter,
+            &DummyStorage,
+        )
+        .unwrap();
 
         let func = sess
             .load_function(

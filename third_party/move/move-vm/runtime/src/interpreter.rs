@@ -5,11 +5,10 @@
 use crate::{
     access_control::AccessControlState,
     data_cache::TransactionDataCache,
-    loader::{Function, Loader, ModuleStorageAdapter, Resolver},
+    loader::{Function, Loader, Resolver},
     module_traversal::TraversalContext,
     native_extensions::NativeContextExtensions,
     native_functions::NativeContext,
-    storage::{module_storage::ModuleStorage, script_storage::ScriptStorage},
     trace,
 };
 use fail::fail_point;
@@ -45,6 +44,7 @@ use std::{
     cmp::min,
     collections::{BTreeMap, HashSet, VecDeque},
     fmt::Write,
+    ops::Deref,
     sync::Arc,
 };
 
@@ -91,33 +91,30 @@ impl Interpreter {
         ty_args: Vec<Type>,
         args: Vec<Value>,
         data_store: &mut TransactionDataCache,
-        module_store: &ModuleStorageAdapter,
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext,
         extensions: &mut NativeContextExtensions,
-        loader: &Loader,
-        module_storage: &impl ModuleStorage,
-        script_storage: &impl ScriptStorage,
+        entrypoint_resolver: &Resolver,
     ) -> VMResult<Vec<Value>> {
         Interpreter {
             operand_stack: Stack::new(),
             call_stack: CallStack::new(),
-            paranoid_type_checks: loader.vm_config().paranoid_type_checks,
+            paranoid_type_checks: entrypoint_resolver
+                .loader()
+                .vm_config()
+                .paranoid_type_checks,
             access_control: AccessControlState::default(),
             active_modules: HashSet::new(),
         }
         .execute_main(
-            loader,
+            entrypoint_resolver,
             data_store,
-            module_store,
             gas_meter,
             traversal_context,
             extensions,
             function,
             ty_args,
             args,
-            module_storage,
-            script_storage,
         )
     }
 
@@ -129,22 +126,26 @@ impl Interpreter {
     /// at the top of the stack (return). If the call stack is empty execution is completed.
     fn execute_main(
         mut self,
-        loader: &Loader,
+        entrypoint_resolver: &Resolver,
         data_store: &mut TransactionDataCache,
-        module_store: &ModuleStorageAdapter,
         gas_meter: &mut impl GasMeter,
         traversal_context: &mut TraversalContext,
         extensions: &mut NativeContextExtensions,
         function: Arc<Function>,
         ty_args: Vec<Type>,
         args: Vec<Value>,
-        module_storage: &impl ModuleStorage,
-        script_storage: &impl ScriptStorage,
     ) -> VMResult<Vec<Value>> {
         let mut locals = Locals::new(function.local_count());
         for (i, value) in args.into_iter().enumerate() {
             locals
-                .store_loc(i, value, loader.vm_config().check_invariant_in_swap_loc)
+                .store_loc(
+                    i,
+                    value,
+                    entrypoint_resolver
+                        .loader()
+                        .vm_config()
+                        .check_invariant_in_swap_loc,
+                )
                 .map_err(|e| self.set_location(e))?;
         }
 
@@ -153,21 +154,40 @@ impl Interpreter {
         }
 
         let mut current_frame = self
-            .make_new_frame(gas_meter, loader, function, ty_args, locals)
+            .make_new_frame(
+                gas_meter,
+                entrypoint_resolver.loader(),
+                function,
+                ty_args,
+                locals,
+            )
             .map_err(|err| self.set_location(err))?;
 
         // Access control for the new frame.
         self.access_control
             .enter_function(&current_frame, current_frame.function.as_ref())
             .map_err(|e| self.set_location(e))?;
+
         loop {
-            let resolver = current_frame
-                .resolver(loader, module_store, module_storage, script_storage)
+            // Select which resolver to use: if we are executing in the context of the entrypoint
+            // function, we use the one provided by the caller.
+            let resolver = if self.call_stack.is_empty() {
+                BorrowedOrOwnedResolver::Borrowed(entrypoint_resolver)
+            } else {
+                let new_resolver = Resolver::new_for_function_in_module(
+                    current_frame.function.as_ref(),
+                    entrypoint_resolver.loader(),
+                    entrypoint_resolver.module_store(),
+                    entrypoint_resolver.module_storage(),
+                )
                 .map_err(|e| e.finish(Location::Undefined))?;
-            let exit_code =
-                current_frame //self
-                    .execute_code(&resolver, &mut self, data_store, gas_meter)
-                    .map_err(|err| self.attach_state_if_invariant_violation(err, &current_frame))?;
+                BorrowedOrOwnedResolver::Owned(new_resolver)
+            };
+
+            let exit_code = current_frame
+                .execute_code(&resolver, &mut self, data_store, gas_meter)
+                .map_err(|err| self.attach_state_if_invariant_violation(err, &current_frame))?;
+
             match exit_code {
                 ExitCode::Return => {
                     let non_ref_vals = current_frame
@@ -244,7 +264,13 @@ impl Interpreter {
                         )?;
                         continue;
                     }
-                    self.set_new_call_frame(&mut current_frame, gas_meter, loader, func, vec![])?;
+                    self.set_new_call_frame(
+                        &mut current_frame,
+                        gas_meter,
+                        resolver.loader(),
+                        func,
+                        vec![],
+                    )?;
                 },
                 ExitCode::CallGeneric(idx) => {
                     let ty_args = resolver
@@ -270,7 +296,10 @@ impl Interpreter {
                         .charge_call_generic(
                             module_id,
                             func.name(),
-                            ty_args.iter().map(|ty| TypeWithLoader { ty, loader }),
+                            ty_args.iter().map(|ty| TypeWithLoader {
+                                ty,
+                                loader: resolver.loader(),
+                            }),
                             self.operand_stack
                                 .last_n(func.param_count())
                                 .map_err(|e| set_err_info!(current_frame, e))?,
@@ -291,7 +320,13 @@ impl Interpreter {
                         )?;
                         continue;
                     }
-                    self.set_new_call_frame(&mut current_frame, gas_meter, loader, func, ty_args)?;
+                    self.set_new_call_frame(
+                        &mut current_frame,
+                        gas_meter,
+                        resolver.loader(),
+                        func,
+                        ty_args,
+                    )?;
                 },
             }
         }
@@ -1299,6 +1334,10 @@ impl CallStack {
     /// Pop a `Frame` off the call stack.
     fn pop(&mut self) -> Option<Frame> {
         self.0.pop()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     fn current_location(&self) -> Location {
@@ -3153,21 +3192,29 @@ impl Frame {
         &self.ty_args
     }
 
-    fn resolver<'a>(
-        &self,
-        loader: &'a Loader,
-        module_store: &'a ModuleStorageAdapter,
-        module_storage: &'a impl ModuleStorage,
-        script_storage: &'a impl ScriptStorage,
-    ) -> PartialVMResult<Resolver<'a>> {
-        self.function
-            .get_resolver(loader, module_store, module_storage, script_storage)
-    }
-
     fn location(&self) -> Location {
         match self.function.module_id() {
             None => Location::Script,
             Some(id) => Location::Module(id.clone()),
+        }
+    }
+}
+
+// A helper data structure to provide a unified API between a borrowed
+// resolver (for the entrypoint execution) and the owned one (for inner
+// calls).
+enum BorrowedOrOwnedResolver<'a> {
+    Borrowed(&'a Resolver<'a>),
+    Owned(Resolver<'a>),
+}
+
+impl<'a> Deref for BorrowedOrOwnedResolver<'a> {
+    type Target = Resolver<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            BorrowedOrOwnedResolver::Borrowed(r) => r,
+            BorrowedOrOwnedResolver::Owned(r) => r,
         }
     }
 }

@@ -92,7 +92,12 @@ impl Adapter {
                 .serialize(&mut binary)
                 .unwrap_or_else(|_| panic!("failure in module serialization: {:#?}", module));
             session
-                .publish_module(binary, WORKING_ACCOUNT, &mut UnmeteredGasMeter)
+                .publish_module(
+                    binary,
+                    WORKING_ACCOUNT,
+                    &mut UnmeteredGasMeter,
+                    &DummyStorage,
+                )
                 .unwrap_or_else(|_| panic!("failure publishing module: {:#?}", module));
         }
         let changeset = session.finish().expect("failure getting write set");
@@ -110,7 +115,12 @@ impl Adapter {
                 .serialize(&mut binary)
                 .unwrap_or_else(|_| panic!("failure in module serialization: {:#?}", module));
             session
-                .publish_module(binary, WORKING_ACCOUNT, &mut UnmeteredGasMeter)
+                .publish_module(
+                    binary,
+                    WORKING_ACCOUNT,
+                    &mut UnmeteredGasMeter,
+                    &DummyStorage,
+                )
                 .expect_err("publishing must fail");
         }
     }

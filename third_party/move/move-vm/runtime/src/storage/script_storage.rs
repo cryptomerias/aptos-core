@@ -34,13 +34,4 @@ pub trait ScriptStorage {
         serialized_script: &[u8],
         f: &dyn Fn(Arc<CompiledScript>) -> PartialVMResult<Script>,
     ) -> PartialVMResult<Arc<Script>>;
-
-    /// Returns verified script from module storage. Returns an invariant violation if
-    /// the script has not been created and cached before.
-    // TODO: The primary use of this API is for the VM to fetch the script context based
-    //       on function's scope, but at that point we only have access to scripts hash...
-    fn fetch_existing_verified_script(
-        &self,
-        script_hash: &[u8; 32],
-    ) -> PartialVMResult<Arc<Script>>;
 }

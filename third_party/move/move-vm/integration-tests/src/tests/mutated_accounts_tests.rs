@@ -67,7 +67,7 @@ fn mutated_accounts() {
     // The resource was published to "account1" and the sender's account
     // (TEST_ADDR) is assumed to be mutated as well (e.g., in a subsequent
     // transaction epilogue).
-    assert_eq!(sess.num_mutated_accounts(&TEST_ADDR), 2);
+    assert_eq!(sess.num_mutated_resources(&TEST_ADDR), 2);
 
     sess.execute_function_bypass_visibility(
         &module_id,
@@ -80,7 +80,7 @@ fn mutated_accounts() {
     )
     .unwrap();
 
-    assert_eq!(sess.num_mutated_accounts(&TEST_ADDR), 2);
+    assert_eq!(sess.num_mutated_resources(&TEST_ADDR), 2);
 
     sess.execute_function_bypass_visibility(
         &module_id,
@@ -92,7 +92,7 @@ fn mutated_accounts() {
         &DummyStorage,
     )
     .unwrap();
-    assert_eq!(sess.num_mutated_accounts(&TEST_ADDR), 2);
+    assert_eq!(sess.num_mutated_resources(&TEST_ADDR), 2);
 
     let changes = sess.finish().unwrap();
     storage.apply(changes).unwrap();
@@ -110,5 +110,5 @@ fn mutated_accounts() {
     .unwrap();
 
     // Only the sender's account (TEST_ADDR) should have been modified.
-    assert_eq!(sess.num_mutated_accounts(&TEST_ADDR), 1);
+    assert_eq!(sess.num_mutated_resources(&TEST_ADDR), 1);
 }

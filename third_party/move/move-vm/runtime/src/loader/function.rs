@@ -3,12 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    loader::{
-        access_specifier_loader::load_access_specifier, Loader, ModuleStorageAdapter, Resolver,
-        ScriptHash,
-    },
+    loader::access_specifier_loader::load_access_specifier,
     native_functions::{NativeFunction, NativeFunctions, UnboxedNativeFunction},
-    storage::{module_storage::ModuleStorage, script_storage::ScriptStorage},
 };
 use move_binary_format::{
     access::ModuleAccess,
@@ -23,13 +19,6 @@ use move_vm_types::loaded_data::{
 };
 use std::{fmt::Debug, sync::Arc};
 
-// A simple wrapper for the "owner" of the function (Module or Script)
-#[derive(Clone, Debug)]
-pub(crate) enum Scope {
-    Module(ModuleId),
-    Script(ScriptHash),
-}
-
 // A runtime function representation.
 pub struct Function {
     #[allow(unused)]
@@ -42,7 +31,7 @@ pub struct Function {
     pub(crate) is_native: bool,
     pub(crate) is_friend_or_private: bool,
     pub(crate) is_entry: bool,
-    pub(crate) scope: Scope,
+    pub(crate) scope: Option<ModuleId>,
     pub(crate) name: Identifier,
     pub(crate) return_tys: Vec<Type>,
     pub(crate) local_tys: Vec<Type>,
@@ -128,7 +117,6 @@ impl Function {
         } else {
             (None, false)
         };
-        let scope = Scope::Module(module_id);
         // Native functions do not have a code unit
         let code = match &def.code {
             Some(code) => code.code.clone(),
@@ -161,7 +149,7 @@ impl Function {
             is_native,
             is_friend_or_private,
             is_entry,
-            scope,
+            scope: Some(module_id),
             name,
             local_tys,
             return_tys,
@@ -176,54 +164,11 @@ impl Function {
     }
 
     pub(crate) fn module_id(&self) -> Option<&ModuleId> {
-        match &self.scope {
-            Scope::Module(module_id) => Some(module_id),
-            Scope::Script(_) => None,
-        }
+        self.scope.as_ref()
     }
 
     pub(crate) fn index(&self) -> FunctionDefinitionIndex {
         self.index
-    }
-
-    pub(crate) fn get_resolver<'a>(
-        &self,
-        loader: &'a Loader,
-        module_store: &'a ModuleStorageAdapter,
-        module_storage: &'a impl ModuleStorage,
-        script_storage: &'a impl ScriptStorage,
-    ) -> PartialVMResult<Resolver<'a>> {
-        match &self.scope {
-            Scope::Module(module_id) => {
-                let module = match loader {
-                    Loader::V1(_) => module_store.module_at(module_id).ok_or_else(|| {
-                        PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                            .with_message(format!(
-                                "Module {} does not exist in cache but it should",
-                                module_id
-                            ))
-                    })?,
-                    Loader::V2(loader) => {
-                        loader.load_module(module_storage, module_id.address(), module_id.name())?
-                    },
-                };
-                Ok(Resolver::for_module(
-                    loader,
-                    module_store,
-                    module,
-                    module_storage,
-                ))
-            },
-            Scope::Script(script_hash) => {
-                let script = loader.get_existing_script(script_hash, script_storage)?;
-                Ok(Resolver::for_script(
-                    loader,
-                    module_store,
-                    script,
-                    module_storage,
-                ))
-            },
-        }
     }
 
     pub(crate) fn local_count(&self) -> usize {
@@ -260,13 +205,13 @@ impl Function {
 
     pub(crate) fn pretty_string(&self) -> String {
         match &self.scope {
-            Scope::Script(_) => "Script::main".into(),
-            Scope::Module(id) => format!(
+            Some(id) => format!(
                 "0x{}::{}::{}",
                 id.address().to_hex(),
                 id.name().as_str(),
                 self.name.as_str()
             ),
+            None => "main".into(),
         }
     }
 

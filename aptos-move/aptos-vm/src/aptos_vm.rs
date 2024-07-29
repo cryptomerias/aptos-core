@@ -1543,6 +1543,7 @@ impl AptosVM {
                     bundle.into_inner(),
                     destination,
                     gas_meter,
+                    &DummyStorage,
                     Compatibility::new(
                         true,
                         !self
