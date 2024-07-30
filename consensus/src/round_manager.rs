@@ -17,9 +17,7 @@ use crate::{
     liveness::{
         proposal_generator::ProposalGenerator,
         proposer_election::ProposerElection,
-        round_state::{
-            GuardedRoundState, NewRoundEvent, NewRoundReason, RoundState, RoundStateLogSchema,
-        },
+        round_state::{NewRoundEvent, NewRoundReason, RoundState, RoundStateLogSchema},
         unequivocal_proposer_election::UnequivocalProposerElection,
     },
     logging::{LogEvent, LogSchema},
@@ -75,12 +73,7 @@ use futures::{channel::oneshot, FutureExt, StreamExt};
 use futures_channel::mpsc::UnboundedReceiver;
 use lru::LruCache;
 use serde::Serialize;
-use std::{
-    mem::Discriminant,
-    pin::Pin,
-    sync::{Arc, MutexGuard},
-    time::Duration,
-};
+use std::{mem::Discriminant, sync::Arc, time::Duration};
 use tokio::{
     sync::oneshot as TokioOneshot,
     time::{sleep, Instant},
@@ -238,7 +231,7 @@ pub mod round_manager_fuzzing;
 pub struct RoundManager {
     epoch_state: Arc<EpochState>,
     block_store: Arc<BlockStore>,
-    round_state: Arc<GuardedRoundState>,
+    round_state: RoundState,
     proposer_election: Arc<UnequivocalProposerElection>,
     proposal_generator: Arc<ProposalGenerator>,
     safety_rules: Arc<Mutex<MetricsSafetyRules>>,
@@ -290,7 +283,7 @@ impl RoundManager {
         Self {
             epoch_state,
             block_store,
-            round_state: Arc::new(GuardedRoundState::from(round_state)),
+            round_state,
             proposer_election: Arc::new(UnequivocalProposerElection::new(proposer_election)),
             proposal_generator: Arc::new(proposal_generator),
             safety_rules,
@@ -361,7 +354,6 @@ impl RoundManager {
             .is_valid_proposer(self.proposal_generator.author(), new_round_event.round)
         {
             let epoch_state = self.epoch_state.clone();
-            let round_state = self.round_state.clone();
             let network = self.network.clone();
             let sync_info = self.block_store.sync_info();
             let proposal_generator = self.proposal_generator.clone();
@@ -371,7 +363,6 @@ impl RoundManager {
                 if let Err(e) = Self::generate_and_send_proposal(
                     epoch_state,
                     new_round_event,
-                    round_state,
                     network,
                     sync_info,
                     proposal_generator,
@@ -390,7 +381,6 @@ impl RoundManager {
     async fn generate_and_send_proposal(
         epoch_state: Arc<EpochState>,
         new_round_event: NewRoundEvent,
-        round_state: Arc<GuardedRoundState>,
         network: Arc<NetworkSender>,
         sync_info: SyncInfo,
         proposal_generator: Arc<ProposalGenerator>,
@@ -399,7 +389,6 @@ impl RoundManager {
     ) -> anyhow::Result<()> {
         let epoch = epoch_state.epoch;
         Self::log_collected_vote_stats(epoch_state, &new_round_event);
-        round_state.setup_leader_timeout();
         let proposal_msg = Self::generate_proposal(
             epoch,
             new_round_event,
@@ -421,13 +410,6 @@ impl RoundManager {
                 .await?;
             }
         };
-        if round_state.current_round() != proposal_msg.proposal().round() {
-            warn!(
-                current_round = round_state.current_round(),
-                proposal_round = proposal_msg.proposal().round(),
-                "Round changed during proposal generation"
-            );
-        }
         network.broadcast_proposal(proposal_msg).await;
         counters::PROPOSALS_COUNT.inc();
         Ok(())
@@ -593,8 +575,7 @@ impl RoundManager {
         let vote = msg.vote().clone();
         let vote_reception_result = self
             .round_state
-            .process_delayed_qc_msg(&self.epoch_state.verifier, msg)
-            .await;
+            .process_delayed_qc_msg(&self.epoch_state.verifier, msg);
         trace!(
             "Received delayed QC message and vote reception result is {:?}",
             vote_reception_result
@@ -1364,8 +1345,8 @@ impl RoundManager {
         &self.epoch_state
     }
 
-    pub fn round_state(&self) -> MutexGuard<RoundState> {
-        self.round_state.locked_inner()
+    pub fn round_state(&self) -> &RoundState {
+        &self.round_state
     }
 
     fn new_log(&self, event: LogEvent) -> LogSchema {
