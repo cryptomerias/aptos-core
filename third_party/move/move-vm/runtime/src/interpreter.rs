@@ -701,6 +701,10 @@ impl Interpreter {
                             format!("Failed to charge transitive dependency for {}. Does this module exists?", module_name)
                         ))?;
 
+                // Note(George): same as above, when V2 loader fetches the function, the module
+                // where it is defined automatically loaded from ModuleStorage as well. There is
+                // no resolution via ModuleStorageAdapter like in V1 design, and it will be soon
+                // removed.
                 if let Loader::V1(loader) = resolver.loader() {
                     loader
                         .load_module(&module_name, data_store, resolver.module_store())

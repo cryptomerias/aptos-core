@@ -163,6 +163,10 @@ impl Function {
         self.file_format_version
     }
 
+    // TODO(George): revisit this APIs and consider returning a result. The
+    //               callers of this method most likely expect an id but in
+    //               case of scripts it is not the case, and we need to analyse
+    //               all use cases carefully before actually changing to error.
     pub(crate) fn module_id(&self) -> Option<&ModuleId> {
         self.scope.as_ref()
     }
