@@ -134,7 +134,26 @@ pub(crate) enum Loader {
     V2(LoaderV2<DummyVerifier>),
 }
 
+macro_rules! versioned_loader_getter {
+    ($getter:ident, $return_ty:ty) => {
+        pub(crate) fn $getter(&self) -> &$return_ty {
+            match self {
+                Self::V1(loader) => loader.$getter(),
+                Self::V2(loader) => loader.$getter(),
+            }
+        }
+    };
+}
+
 impl Loader {
+    versioned_loader_getter!(vm_config, VMConfig);
+
+    versioned_loader_getter!(struct_name_index_map, StructNameIndexMap);
+
+    versioned_loader_getter!(ty_builder, TypeBuilder);
+
+    versioned_loader_getter!(ty_cache, RwLock<TypeCache>);
+
     pub(crate) fn new(natives: NativeFunctions, vm_config: VMConfig) -> Self {
         Self::V1(LoaderV1 {
             scripts: RwLock::new(ScriptCache::new()),
@@ -145,38 +164,6 @@ impl Loader {
             module_cache_hits: RwLock::new(BTreeSet::new()),
             vm_config,
         })
-    }
-
-    pub(crate) fn is_v1(&self) -> bool {
-        matches!(self, Self::V1(_))
-    }
-
-    pub(crate) fn vm_config(&self) -> &VMConfig {
-        match self {
-            Self::V1(loader) => loader.vm_config(),
-            Self::V2(loader) => loader.vm_config(),
-        }
-    }
-
-    pub(crate) fn ty_builder(&self) -> &TypeBuilder {
-        match self {
-            Self::V1(loader) => loader.ty_builder(),
-            Self::V2(loader) => loader.ty_builder(),
-        }
-    }
-
-    pub(crate) fn ty_cache(&self) -> &RwLock<TypeCache> {
-        match self {
-            Self::V1(loader) => &loader.type_cache,
-            Self::V2(loader) => &loader.ty_cache,
-        }
-    }
-
-    pub(crate) fn struct_name_index_map(&self) -> &StructNameIndexMap {
-        match self {
-            Self::V1(loader) => &loader.struct_name_index_map,
-            Self::V2(loader) => &loader.struct_name_index_map,
-        }
     }
 
     /// Flush this cache if it is marked as invalidated.
@@ -200,10 +187,7 @@ impl Loader {
 
     /// Check whether this cache is invalidated.
     pub(crate) fn is_invalidated(&self) -> bool {
-        match self {
-            Self::V1(loader) => *loader.invalidated.read(),
-            Self::V2(_) => false,
-        }
+        matches!(self, Self::V1(loader) if *loader.invalidated.read())
     }
 
     pub(crate) fn check_script_dependencies_and_check_gas(
@@ -330,100 +314,6 @@ impl Loader {
         }
     }
 
-    // Loading verifies the module if it was never loaded.
-    // Type parameters are inferred from the expected return type. Returns an error if it's not
-    // possible to infer the type parameters or return type cannot be matched.
-    // The type parameters are verified with capabilities.
-    pub(crate) fn load_function_with_type_arg_inference(
-        &self,
-        module_id: &ModuleId,
-        function_name: &IdentStr,
-        expected_return_type: &Type,
-        data_store: &mut TransactionDataCache,
-        module_store: &ModuleStorageAdapter,
-        module_storage: &impl ModuleStorageV2,
-    ) -> VMResult<LoadedFunction> {
-        let function = self.load_function_without_type_args(
-            module_id,
-            function_name,
-            data_store,
-            module_store,
-            module_storage,
-        )?;
-
-        if function.return_tys().len() != 1 {
-            // For functions that are marked constructor this should not happen.
-            return Err(PartialVMError::new(StatusCode::ABORTED).finish(Location::Undefined));
-        }
-
-        let mut map = BTreeMap::new();
-        if !match_return_type(&function.return_tys()[0], expected_return_type, &mut map) {
-            // For functions that are marked constructor this should not happen.
-            return Err(
-                PartialVMError::new(StatusCode::INVALID_MAIN_FUNCTION_SIGNATURE)
-                    .finish(Location::Undefined),
-            );
-        }
-
-        // Construct the type arguments from the match
-        let mut ty_args = vec![];
-        let num_ty_args = function.ty_param_abilities().len();
-        for i in 0..num_ty_args {
-            if let Some(t) = map.get(&(i as u16)) {
-                ty_args.push((*t).clone());
-            } else {
-                // Unknown type argument we are not able to infer the type arguments.
-                // For functions that are marked constructor this should not happen.
-                return Err(
-                    PartialVMError::new(StatusCode::INVALID_MAIN_FUNCTION_SIGNATURE)
-                        .finish(Location::Undefined),
-                );
-            }
-        }
-
-        Type::verify_ty_arg_abilities(function.ty_param_abilities(), &ty_args)
-            .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
-
-        Ok(LoadedFunction { ty_args, function })
-    }
-
-    // Loading verifies the module if it was never loaded.
-    // Type parameters are checked as well after every type is loaded.
-    pub(crate) fn load_function(
-        &self,
-        module_id: &ModuleId,
-        function_name: &IdentStr,
-        ty_args: &[TypeTag],
-        data_store: &mut TransactionDataCache,
-        module_store: &ModuleStorageAdapter,
-        module_storage: &impl ModuleStorageV2,
-    ) -> VMResult<LoadedFunction> {
-        let function = self.load_function_without_type_args(
-            module_id,
-            function_name,
-            data_store,
-            module_store,
-            module_storage,
-        )?;
-
-        let ty_args = ty_args
-            .iter()
-            .map(|ty_arg| self.load_type(ty_arg, data_store, module_store, module_storage))
-            .collect::<VMResult<Vec<_>>>()
-            .map_err(|mut err| {
-                // User provided type argument failed to load. Set extra sub status to distinguish from internal type loading error.
-                if StatusCode::TYPE_RESOLUTION_FAILURE == err.major_status() {
-                    err.set_sub_status(move_core_types::vm_status::sub_status::type_resolution_failure::EUSER_TYPE_LOADING_FAILURE);
-                }
-                err
-            })?;
-
-        Type::verify_ty_arg_abilities(function.ty_param_abilities(), &ty_args)
-            .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
-
-        Ok(LoadedFunction { ty_args, function })
-    }
-
     pub(crate) fn verify_module_bundle_for_publication(
         &self,
         modules: &[CompiledModule],
@@ -469,12 +359,16 @@ impl Loader {
         struct_idx: StructNameIndex,
     ) -> MappedRwLockReadGuard<StructIdentifier> {
         match self {
-            Self::V1(loader) => loader.struct_name_index_map.idx_to_struct_name(struct_idx),
-            Self::V2(loader) => loader.struct_name_index_map.idx_to_struct_name(struct_idx),
+            Self::V1(loader) => loader
+                .struct_name_index_map()
+                .idx_to_struct_name(struct_idx),
+            Self::V2(loader) => loader
+                .struct_name_index_map()
+                .idx_to_struct_name(struct_idx),
         }
     }
 
-    pub fn get_struct_type(
+    pub fn fetch_struct_ty_by_idx(
         &self,
         idx: StructNameIndex,
         module_store: &ModuleStorageAdapter,
@@ -559,6 +453,14 @@ impl LoaderV1 {
 
     pub(crate) fn ty_builder(&self) -> &TypeBuilder {
         &self.vm_config.ty_builder
+    }
+
+    pub(crate) fn ty_cache(&self) -> &RwLock<TypeCache> {
+        &self.type_cache
+    }
+
+    pub(crate) fn struct_name_index_map(&self) -> &StructNameIndexMap {
+        &self.struct_name_index_map
     }
 
     //
@@ -679,7 +581,105 @@ impl LoaderV1 {
     //
     // Module verification and loading
     //
+}
 
+impl Loader {
+    // Loading verifies the module if it was never loaded.
+    // Type parameters are inferred from the expected return type. Returns an error if it's not
+    // possible to infer the type parameters or return type cannot be matched.
+    // The type parameters are verified with capabilities.
+    pub(crate) fn load_function_with_type_arg_inference(
+        &self,
+        module_id: &ModuleId,
+        function_name: &IdentStr,
+        expected_return_type: &Type,
+        data_store: &mut TransactionDataCache,
+        module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
+    ) -> VMResult<LoadedFunction> {
+        let function = self.load_function_without_type_args(
+            module_id,
+            function_name,
+            data_store,
+            module_store,
+            module_storage,
+        )?;
+
+        if function.return_tys().len() != 1 {
+            // For functions that are marked constructor this should not happen.
+            return Err(PartialVMError::new(StatusCode::ABORTED).finish(Location::Undefined));
+        }
+
+        let mut map = BTreeMap::new();
+        if !match_return_type(&function.return_tys()[0], expected_return_type, &mut map) {
+            // For functions that are marked constructor this should not happen.
+            return Err(
+                PartialVMError::new(StatusCode::INVALID_MAIN_FUNCTION_SIGNATURE)
+                    .finish(Location::Undefined),
+            );
+        }
+
+        // Construct the type arguments from the match
+        let mut ty_args = vec![];
+        let num_ty_args = function.ty_param_abilities().len();
+        for i in 0..num_ty_args {
+            if let Some(t) = map.get(&(i as u16)) {
+                ty_args.push((*t).clone());
+            } else {
+                // Unknown type argument we are not able to infer the type arguments.
+                // For functions that are marked constructor this should not happen.
+                return Err(
+                    PartialVMError::new(StatusCode::INVALID_MAIN_FUNCTION_SIGNATURE)
+                        .finish(Location::Undefined),
+                );
+            }
+        }
+
+        Type::verify_ty_arg_abilities(function.ty_param_abilities(), &ty_args)
+            .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
+
+        Ok(LoadedFunction { ty_args, function })
+    }
+
+    // Loading verifies the module if it was never loaded.
+    // Type parameters are checked as well after every type is loaded.
+    pub(crate) fn load_function(
+        &self,
+        module_id: &ModuleId,
+        function_name: &IdentStr,
+        ty_args: &[TypeTag],
+        data_store: &mut TransactionDataCache,
+        module_store: &ModuleStorageAdapter,
+        module_storage: &impl ModuleStorageV2,
+    ) -> VMResult<LoadedFunction> {
+        let function = self.load_function_without_type_args(
+            module_id,
+            function_name,
+            data_store,
+            module_store,
+            module_storage,
+        )?;
+
+        let ty_args = ty_args
+            .iter()
+            .map(|ty_arg| self.load_type(ty_arg, data_store, module_store, module_storage))
+            .collect::<VMResult<Vec<_>>>()
+            .map_err(|mut err| {
+                // User provided type argument failed to load. Set extra sub status to distinguish from internal type loading error.
+                if StatusCode::TYPE_RESOLUTION_FAILURE == err.major_status() {
+                    err.set_sub_status(move_core_types::vm_status::sub_status::type_resolution_failure::EUSER_TYPE_LOADING_FAILURE);
+                }
+                err
+            })?;
+
+        Type::verify_ty_arg_abilities(function.ty_param_abilities(), &ty_args)
+            .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
+
+        Ok(LoadedFunction { ty_args, function })
+    }
+}
+
+impl LoaderV1 {
     // Entry point for module publishing (`MoveVM::publish_module_bundle`).
     //
     // All modules in the bundle to be published must be loadable. This function performs all
@@ -1663,6 +1663,10 @@ impl<'a> Resolver<'a> {
             .type_to_fully_annotated_layout(ty, self.module_store, self.module_storage)
     }
 
+    //
+    // Getters
+    //
+
     pub(crate) fn loader(&self) -> &Loader {
         self.loader
     }
@@ -1673,6 +1677,10 @@ impl<'a> Resolver<'a> {
 
     pub(crate) fn module_storage(&self) -> &dyn ModuleStorageV2 {
         self.module_storage
+    }
+
+    pub(crate) fn vm_config(&self) -> &VMConfig {
+        self.loader().vm_config()
     }
 }
 
@@ -1857,7 +1865,8 @@ impl Loader {
         }
 
         let count_before = *count;
-        let struct_type = self.get_struct_type(struct_name_idx, module_store, module_storage)?;
+        let struct_type =
+            self.fetch_struct_ty_by_idx(struct_name_idx, module_store, module_storage)?;
 
         let mut has_identifier_mappings = false;
 
@@ -2116,7 +2125,8 @@ impl Loader {
             }
         }
 
-        let struct_type = self.get_struct_type(struct_name_idx, module_store, module_storage)?;
+        let struct_type =
+            self.fetch_struct_ty_by_idx(struct_name_idx, module_store, module_storage)?;
 
         // TODO(#13806): have annotated layouts for variants. Currently, we just return the raw
         //   layout for them.
@@ -2254,7 +2264,8 @@ impl Loader {
             return Ok(depth_formula.clone());
         }
 
-        let struct_type = self.get_struct_type(struct_name_idx, module_store, module_storage)?;
+        let struct_type =
+            self.fetch_struct_ty_by_idx(struct_name_idx, module_store, module_storage)?;
         let formulas = match &struct_type.layout {
             StructLayout::Single(fields) => fields
                 .iter()

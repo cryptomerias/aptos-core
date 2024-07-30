@@ -129,19 +129,13 @@ impl MoveVM {
     /// but decided to not commit the result to the data store. Because the code cache currently
     /// does not support deletion, the cache will, incorrectly, still contain this module.
     pub fn mark_loader_cache_as_invalid(&self) {
-        if self.runtime.loader().is_v1() {
-            self.runtime.loader().mark_as_invalid()
-        }
+        self.runtime.loader().mark_as_invalid()
     }
 
     /// Returns true if the loader cache has been invalidated (either by explicit call above
     /// or by the runtime)
     pub fn is_loader_cache_invalidated(&self) -> bool {
-        if self.runtime.loader().is_v1() {
-            self.runtime.loader().is_invalidated()
-        } else {
-            false
-        }
+        self.runtime.loader().is_invalidated()
     }
 
     /// If the loader cache has been invalidated (either by the above call or by internal logic)
@@ -153,12 +147,10 @@ impl MoveVM {
         //   Thus if an module invalidation event happens (e.g, by upgrade request), we will need to flush this internal cache as well.
         // - If we can deprecate this session api, we will be able to get rid of this internal loaded cache and make the MoveVM "stateless" and
         //   invulnerable to module invalidation.
-        if self.runtime.loader().is_v1() {
-            if self.runtime.loader().is_invalidated() {
-                self.runtime.module_cache.flush();
-            };
-            self.runtime.loader().flush_if_invalidated()
-        }
+        if self.runtime.loader().is_invalidated() {
+            self.runtime.module_cache.flush();
+        };
+        self.runtime.loader().flush_if_invalidated()
     }
 
     /// DO NOT USE THIS API!

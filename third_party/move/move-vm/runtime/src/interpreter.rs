@@ -99,10 +99,7 @@ impl Interpreter {
         Interpreter {
             operand_stack: Stack::new(),
             call_stack: CallStack::new(),
-            paranoid_type_checks: entrypoint_resolver
-                .loader()
-                .vm_config()
-                .paranoid_type_checks,
+            paranoid_type_checks: entrypoint_resolver.vm_config().paranoid_type_checks,
             access_control: AccessControlState::default(),
             active_modules: HashSet::new(),
         }
@@ -141,10 +138,7 @@ impl Interpreter {
                 .store_loc(
                     i,
                     value,
-                    entrypoint_resolver
-                        .loader()
-                        .vm_config()
-                        .check_invariant_in_swap_loc,
+                    entrypoint_resolver.vm_config().check_invariant_in_swap_loc,
                 )
                 .map_err(|e| self.set_location(e))?;
         }
@@ -643,9 +637,7 @@ impl Interpreter {
                         ));
                 }
 
-                if resolver.loader().vm_config().disallow_dispatch_for_native
-                    && target_func.is_native()
-                {
+                if resolver.vm_config().disallow_dispatch_for_native && target_func.is_native() {
                     return Err(PartialVMError::new(StatusCode::RUNTIME_DISPATCH_ERROR)
                         .with_message("Invoking native function during dispatch".to_string()));
                 }
@@ -1348,7 +1340,7 @@ impl CallStack {
 
 fn check_depth_of_type(resolver: &Resolver, ty: &Type) -> PartialVMResult<()> {
     // Start at 1 since we always call this right before we add a new node to the value's depth.
-    let max_depth = match resolver.loader().vm_config().max_value_nest_depth {
+    let max_depth = match resolver.vm_config().max_value_nest_depth {
         Some(max_depth) => max_depth,
         None => return Ok(()),
     };
@@ -2487,7 +2479,7 @@ impl Frame {
                     Bytecode::MoveLoc(idx) => {
                         let local = self.locals.move_loc(
                             *idx as usize,
-                            resolver.loader().vm_config().check_invariant_in_swap_loc,
+                            resolver.vm_config().check_invariant_in_swap_loc,
                         )?;
                         gas_meter.charge_move_loc(&local)?;
 
@@ -2499,7 +2491,7 @@ impl Frame {
                         self.locals.store_loc(
                             *idx as usize,
                             value_to_store,
-                            resolver.loader().vm_config().check_invariant_in_swap_loc,
+                            resolver.vm_config().check_invariant_in_swap_loc,
                         )?;
                     },
                     Bytecode::Call(idx) => {

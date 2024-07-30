@@ -484,7 +484,7 @@ impl<'r, 'l> Session<'r, 'l> {
         self.move_vm.runtime.loader().ty_builder()
     }
 
-    pub fn fetch_struct_ty(
+    pub fn fetch_struct_ty_by_idx(
         &self,
         idx: StructNameIndex,
         module_storage: &impl ModuleStorage,
@@ -492,7 +492,7 @@ impl<'r, 'l> Session<'r, 'l> {
         self.move_vm
             .runtime
             .loader()
-            .get_struct_type(idx, &self.module_store, module_storage)
+            .fetch_struct_ty_by_idx(idx, &self.module_store, module_storage)
             .ok()
     }
 

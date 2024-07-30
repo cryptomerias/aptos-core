@@ -31,13 +31,13 @@ use parking_lot::RwLock;
 use std::{collections::BTreeMap, sync::Arc};
 use typed_arena::Arena;
 
-/// New implementation of loader, which is stateless - i.e., it does not contain
+/// V2 implementation of loader, which is stateless - i.e., it does not contain
 /// module or script cache. Instead, module and script storages are passed to all
 /// APIs by reference.
 pub(crate) struct LoaderV2<V: Clone + Verifier> {
     // Map to from struct names to indices, to save on unnecessary cloning and
     // reduce memory consumption.
-    pub(crate) struct_name_index_map: StructNameIndexMap,
+    struct_name_index_map: StructNameIndexMap,
     // Configuration of the VM, which own this loader. Contains information about
     // enabled checks, etc.
     vm_config: VMConfig,
@@ -56,7 +56,7 @@ pub(crate) struct LoaderV2<V: Clone + Verifier> {
     //   it is safe for the loader to own this cache) MUST be documented.
     // TODO(George): Revisit type cache implementation. For now re-use the existing
     //               one to unblock upgradable module and script storage first.
-    pub(crate) ty_cache: RwLock<TypeCache>,
+    ty_cache: RwLock<TypeCache>,
 }
 
 impl<V: Clone + Verifier> LoaderV2<V> {
@@ -66,6 +66,14 @@ impl<V: Clone + Verifier> LoaderV2<V> {
 
     pub(crate) fn ty_builder(&self) -> &TypeBuilder {
         &self.vm_config.ty_builder
+    }
+
+    pub(crate) fn ty_cache(&self) -> &RwLock<TypeCache> {
+        &self.ty_cache
+    }
+
+    pub(crate) fn struct_name_index_map(&self) -> &StructNameIndexMap {
+        &self.struct_name_index_map
     }
 
     // TODO(George): Port TODOs and description from loader V1. Keep things like this for now
@@ -258,11 +266,11 @@ impl<V: Clone + Verifier> LoaderV2<V> {
 impl<V: Clone + Verifier> Clone for LoaderV2<V> {
     fn clone(&self) -> Self {
         Self {
-            struct_name_index_map: self.struct_name_index_map.clone(),
-            vm_config: self.vm_config.clone(),
+            struct_name_index_map: self.struct_name_index_map().clone(),
+            vm_config: self.vm_config().clone(),
             verifier: self.verifier.clone(),
             natives: self.natives.clone(),
-            ty_cache: RwLock::new(self.ty_cache.read().clone()),
+            ty_cache: RwLock::new(self.ty_cache().read().clone()),
         }
     }
 }
@@ -303,7 +311,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
         Script::new(
             compiled_script,
             &struct_ty_storage,
-            &self.struct_name_index_map,
+            self.struct_name_index_map(),
         )
     }
 
@@ -343,7 +351,7 @@ impl<V: Clone + Verifier> LoaderV2<V> {
             size,
             compiled_module,
             &struct_ty_storage,
-            &self.struct_name_index_map,
+            self.struct_name_index_map(),
         )
     }
 }
